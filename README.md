@@ -38,6 +38,27 @@ All commands are run from the root of the project, from a terminal:
 | `npm run preview`         | Preview your build locally, before deploying     |
 | `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
 | `npm run astro -- --help` | Get help using the Astro CLI                     |
+| `npm run test`            | Run Vitest unit tests                            |
+| `npm run test:coverage`   | Run unit tests with a coverage report            |
+| `npm run test:e2e`        | Run Playwright e2e (after `test:e2e:install`)    |
+
+## Data Layer & Event Spine
+
+Blended is event-sourced. `src/lib/db.ts` is the single shared module that
+initializes the InstantDB client and defines the Blended schema, and exposes
+`writeEvent()` — the dual-write convention every session feature builds on. A
+call to `writeEvent()` appends a `sessionEvents` envelope **and** applies the
+matching projection update in one transaction, so the log stays a complete,
+replayable record (see `docs/adr/0001-…` and `docs/adr/0003-…`). The dev-only
+`/dev/event-spine` route demonstrates it live across browser windows.
+
+Before deploying against an Instant app with schema enforcement enabled, push
+the schema once with `npx instant-cli push schema` — otherwise every
+`writeEvent()` transaction is rejected (the rejection surfaces to the caller, it
+is not silent).
+
+Set `PUBLIC_INSTANTDB_APP_ID` in `.env` (copy `.env.example`) — it is the only
+required environment variable, used by both the Todo demo and the event spine.
 
 ## Resources
 

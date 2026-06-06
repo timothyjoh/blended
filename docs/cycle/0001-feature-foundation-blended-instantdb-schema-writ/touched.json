@@ -1,0 +1,16 @@
+{
+  "files": [
+    ".env.example",
+    ".gitignore",
+    "AGENTS.md",
+    "README.md",
+    "astro.config.mjs",
+    "package-lock.json",
+    "package.json",
+    "src/components/EventSpineHarness.tsx",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/pages/dev/",
+    "tsconfig.json"
+  ]
+}

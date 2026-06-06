@@ -7,7 +7,12 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "codex": "CODEX_HOME=./.codex codex",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@ariakit/react": "^0.4.29",
@@ -61,7 +66,10 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "daisyui": "^5.5.20"
+    "@playwright/test": "^1.60.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "daisyui": "^5.5.20",
+    "vitest": "^4.1.8"
   },
   "overrides": {
     "path-to-regexp": "^6.3.0",
