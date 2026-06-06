@@ -12,6 +12,7 @@ import { DEFAULT_THEME, getAvailableThemes, THEME_STORAGE_KEY } from '@/lib/them
 const availableThemes = getAvailableThemes()
 const defaultTheme = DEFAULT_THEME
 const storageKey = THEME_STORAGE_KEY
+const { title = 'Astro Basics' } = Astro.props
 
 ---
 
@@ -22,7 +23,7 @@ const storageKey = THEME_STORAGE_KEY
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>{title}</title>
 		<script is:inline define:vars={{ storageKey, defaultTheme }}>
 			try {
 				const stored = window.localStorage.getItem(storageKey)

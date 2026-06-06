@@ -1,811 +1,790 @@
-# Blended — Product Spec
+# Blended Product and Technical Specification
 
-**Project name:** Blended  
-**Context:** 2-week hackathon project  
+**Status:** Draft v2 — expanded implementation specification  
+**Project context:** 2-week hackathon product moving toward a durable classroom-session platform  
 **Created:** 2026-06-05  
-**Status:** Working product spec copied from project planning notes  
-**Related spec:** [[blended-classroom-session-prd]] / `../ai/blended-classroom-session-prd.md`  
-**Related baseline:** `../ai/instantdb-expo-chat-baseline-spec.md`
+**Last updated:** 2026-06-06  
+**Primary audience:** builders, coding agents, designers, demo operators, and future maintainers  
+**Source baseline:** working product notes plus the `/mockups` prototype gallery in this repository  
+**Canonical repository:** `https://github.com/Timothyjoh/blended`
 
-## 1. One-line Product Shape
+## Purpose
 
-Blended is an event-sourced, synchronous learning-session app where a teacher queues web resources, controls the active resource during a live session, students join by magic link, interact with the material locally, ask questions, participate through lightweight cursor-voting, and later replay the session timeline.
+This specification defines the expected behavior, domain model, event model, user journeys, safety constraints, and validation plan for **Blended**: an event-sourced, synchronous learning-session application where a teacher controls lesson resources, students participate through questions and cursor-voting, AI keeps high-signal questions visible, and every meaningful action becomes replayable session evidence.
 
-## 2. Product Judgment
+The product MUST NOT be treated as a generic chat room, video-call clone, or passive document viewer. The product spine is the **session event stream**. Chat, resources, AI classifications, cursor votes, question clusters, moderation outcomes, and replay views all derive value from the same durable session timeline.
 
-This should not be positioned as a chat app, a video-call clone, or a generic room system.
+---
 
-The strongest product shape is:
+## For Review — Agent Assumptions and Judgment Calls
 
-> A live learning session system that turns synchronous classroom activity into a replayable, AI-assisted learning artifact.
+The user asked the agent to make solid guesses instead of blocking on questions. The following assumptions are intentionally marked **For Review** so they can be accepted, revised, or deleted later.
 
-The product spine is not messages. It is the **event stream**.
+1. **Hackathon-first but architecture-aware.** The MVP SHOULD optimize for a credible 2-week demo while preserving an event-sourced architecture that can grow into production.
+2. **InstantDB is the initial realtime/auth/data system of record.** The schema names below are implementation guidance for InstantDB; exact collection/index syntax is implementation-defined until the first schema migration lands.
+3. **AI provider is implementation-defined.** The spec describes model inputs/outputs, confidence handling, and moderation policy, but does not mandate OpenAI, Anthropic, local models, or a specific routing layer.
+4. **Teacher speech transcription is not MVP.** The event model reserves transcript and spoken-answer events, but the first build MUST support manual answered-state transitions before AI listening exists.
+5. **External resource embedding remains best-effort.** Blended SHOULD embed known-compatible web resources and MUST provide graceful fallback for blocked iframes. It MUST NOT promise DOM-level instrumentation of arbitrary third-party content.
+6. **Student email privacy is strict by default.** Email is used for authentication and private records; live classroom surfaces SHOULD display only a derived username unless an explicit school/admin policy later says otherwise.
+7. **The `/spec` route is documentation infrastructure, not product surface.** It MAY be public in the hackathon app, but production deployments SHOULD gate or omit internal specs if they include sensitive roadmap details.
+8. **Optimistic moderation is acceptable for MVP only if reversible.** Student messages MAY appear optimistically while AI moderation is pending, but rejected messages MUST be hidden from other students after validation and recorded as moderation events.
+9. **Replay is event-log-first.** The hackathon replay SHOULD be a chronological event/activity timeline with selected summaries, not video/audio reconstruction.
+10. **Package manager drift should be cleaned later.** This repository currently contains npm and pnpm lockfile context. The team SHOULD choose one package manager policy before production hardening.
 
-Everything meaningful should become a timestamped session event so the app can reconstruct what happened later:
+---
 
-- resource switches
-- session mode changes
-- student questions
-- teacher answers
-- cursor-voting prompts
-- cursor-voting summaries
-- chat messages
-- AI question reviews
-- AI answer matches
-- future transcript segments
+## Normative Language
 
-This is the difference between a disposable live app and a durable learning system.
+The key words `MUST`, `MUST NOT`, `REQUIRED`, `SHOULD`, `SHOULD NOT`, `RECOMMENDED`, `MAY`, and `OPTIONAL` in this document are to be interpreted as described in RFC 2119.
 
-## 3. Current Core Decisions
+`Implementation-defined` means the implementation must choose and document a behavior, but this specification does not prescribe a single universal policy.
 
-### Use “sessions,” not “rooms”
+`MVP` means the minimum credible hackathon/demo implementation. MVP requirements are still normative for the hackathon slice when marked with `MUST`.
 
-The product should call the main object a **session**.
+---
 
-Reasoning:
+## 1. Product Shape
 
-- Rooms sound persistent and chat-like.
-- Sessions sound bounded, instructional, replayable, and event-like.
-- A teacher may run many short-lived sessions.
-- A session can be archived and replayed after it ends.
+Blended is a live learning-session system that turns synchronous classroom activity into a replayable, AI-assisted learning artifact.
 
-### Teachers queue resources before class
+A teacher can create a bounded session, queue lesson resources, invite students by link, control the active resource, receive student participation, run cursor-voting prompts, and end with a session timeline. Students can join with low friction, follow the active lesson context, ask questions naturally, endorse existing questions, and later review what was answered.
 
-A teacher should be able to create a session and queue multiple URL resources before the session starts.
+The product MUST make the following distinction clear:
 
-Examples:
+| Product concept | Blended interpretation | What it is not |
+|---|---|---|
+| Session | Bounded instructional event with lifecycle and replay | Permanent chat room |
+| Resource | Teacher-controlled lesson artifact | Shared browser with student control |
+| Message | Raw participation signal | The product's primary object |
+| Question cluster | AI/human-curated classroom need | A plain chat thread |
+| Cursor vote | Lightweight spatial attention/confusion signal | Freehand whiteboard annotation |
+| Replay | Event-derived learning record | Full video recording in MVP |
 
-- Google Slides presentation
-- web presentation
-- article
-- Google Form
-- interactive webpage
-- later: uploaded PDF or slide deck converted into controlled images
+---
 
-During the live session, the teacher toggles between queued resources.
+## 2. Goals and Non-Goals
 
-### Teacher controls the active resource
+### 2.1 Goals
 
-Students cannot change the active URL/resource for the whole session.
+1. Blended MUST let a teacher create, start, manage, end, and replay a synchronous learning session.
+2. Blended MUST support teacher-controlled active resources selected from a teacher-managed queue.
+3. Blended MUST let students join an existing session through a low-friction session link and passwordless email authentication.
+4. Blended MUST capture meaningful session activity as timestamped events that can be replayed or audited later.
+5. Blended MUST let students submit natural-language messages without requiring them to choose whether each message is chat, question, feedback, or confusion.
+6. Blended SHOULD use AI to classify messages, surface likely questions, cluster similar questions, and reduce teacher overload.
+7. Blended MUST let teachers manually mark question clusters as answered even when AI/transcription is unavailable.
+8. Blended SHOULD make surfaced question clusters visible to students so duplicate questions become upvotes/endorsements instead of repeated noise.
+9. Blended MUST support a cursor-voting interaction mode that records normalized spatial signals over the active resource viewport.
+10. Blended SHOULD preserve answered questions and answer summaries for late, distracted, or replaying students.
+11. Blended MUST provide graceful resource fallback when an external URL cannot be embedded.
+12. Blended MUST keep live student identity display privacy-preserving by default.
+13. Blended SHOULD be mobile-responsive for student participation and desktop/tablet optimized for teacher facilitation.
+14. Blended MUST provide a convincing hackathon demo path that works without external URL embedding luck or full AI transcription.
 
-Students can:
+### 2.2 Non-Goals
 
-- scroll locally
-- click and interact locally
-- fill out forms if the embedded resource permits it
-- ask questions
-- participate in enabled interaction modes
+1. Blended MUST NOT become a video conferencing product for the MVP.
+2. Blended MUST NOT require native mobile app installation for student participation.
+3. Blended MUST NOT require arbitrary third-party webpages to expose DOM events to Blended.
+4. Blended MUST NOT implement freehand collaborative drawing in the MVP.
+5. Blended MUST NOT require teachers to type every answer into chat during live presentation.
+6. Blended SHOULD NOT expose raw student emails in live classroom surfaces.
+7. Blended SHOULD NOT make AI moderation irreversible without event evidence and review affordances.
+8. Blended SHOULD NOT attempt full video, audio, pointer-stream, or transcript replay in the hackathon slice.
+9. Blended MUST NOT let students change the active session resource for everyone.
+10. Blended MUST NOT hide important product decisions in mockup-only behavior; routes and prototypes must map back to this spec or later amendments.
 
-Students cannot:
+---
 
-- change the active resource selected by the teacher
-- rename themselves in MVP
-- draw/highlight freely on the shared screen in MVP
+## 3. Actors and Permissions
 
-### Teacher and student authentication
+| Actor | Description | MVP capabilities | Explicit limits |
+|---|---|---|---|
+| Teacher | Session owner/facilitator | Create session, queue resources, start/end session, activate resource, view participants, view clusters, start cursor votes, mark answered | SHOULD NOT see rejected student moderation content during live teaching |
+| Student | Session participant | Join session, view active resource, scroll/interact locally, submit messages/questions, upvote/endorse clusters, participate in cursor votes, view answered clusters | MUST NOT activate global resources or manage session lifecycle |
+| AI assistant | Automated classifier/moderator/clusterer | Classify messages, group questions, recommend priority, detect likely answered state when evidence exists, moderate content | MUST expose confidence/category/reason events; MUST NOT be sole irreversible authority |
+| System | Application runtime and data layer | Persist events, maintain projections, sync state, enforce permissions | MUST protect secrets and private identity fields |
+| Demo operator | Person running the hackathon demo | Seed data, run scripted session, use fallback resources | MUST be able to recover demo if embeddings or AI fail |
 
-Both teachers and students use the same passwordless email magic link/code mechanism.
+---
 
-No passwords.
+## 4. System Overview
 
-The difference is the entry path after authentication.
+### 4.1 Main Components
 
-Teacher flow:
+| Component | Responsibility |
+|---|---|
+| Marketing / entry surface | Explains value, routes teachers to auth/dashboard, routes students through join links |
+| Teacher dashboard | Session setup, resource queue, live facilitation controls, question triage, cursor-vote controls, replay review |
+| Student experience | Mobile-first active resource view, chat/question input, surfaced clusters, cursor-vote participation, answered review |
+| Event store | Append-only session events and replay source of truth |
+| Projections | Current session state derived from events: active resource, participants, clusters, answered state, moderation state |
+| Realtime sync | InstantDB-backed propagation of session state, presence, messages, and event projections |
+| AI pipeline | Message classification, question clustering, moderation, answered detection, future transcript answer matching |
+| Resource renderer | Controlled wrapper around embeddable resources with fallback handling and cursor overlay |
+| Documentation route | `/spec` route that renders this markdown specification as HTML for internal review |
 
-1. Teacher arrives from the marketing page.
-2. Teacher enters email.
-3. System sends a magic link or code.
-4. Teacher authenticates.
-5. Teacher lands in a dashboard.
-6. Dashboard guides them to set up their first session.
+### 4.2 Data Flow Summary
 
-Student flow:
+1. Teacher creates a draft session.
+2. Teacher queues resources before or during class.
+3. Teacher starts the session; system appends `SessionStarted`.
+4. Students join via session link and authenticate.
+5. Teacher activates a resource; system appends `ResourceActivated`.
+6. Students submit messages; system appends `ChatMessageSubmitted` and launches classification/moderation.
+7. AI emits classification/moderation events.
+8. Question-like messages become questions and/or are merged into clusters.
+9. Teacher sees ranked clusters and manually answers or marks them addressed.
+10. Teacher starts cursor voting; students produce ephemeral pointer positions and sampled prompt data.
+11. Cursor-vote end emits a summary event.
+12. Session ends; replay view reconstructs the timeline from events and projections.
 
-1. Student opens a specific session join link.
-2. Student enters email.
-3. System sends a magic link or code.
-4. Student authenticates.
-5. Student lands directly in the existing session.
+---
 
-Initial student identity behavior:
+## 5. Core Domain Model
 
-- student enters email
-- system stores email privately in the database
-- username becomes email local-part
-- teacher and other students see only the username during the live session
+### 5.1 Entity Summary
 
-Example:
+| Entity | Stable ID | Owner | Persisted? | Purpose |
+|---|---|---|:---:|---|
+| `User` | `userId` | Auth system | yes | Authenticated teacher/student identity |
+| `Session` | `sessionId` | Teacher | yes | Bounded live/replayable classroom event |
+| `SessionResource` | `resourceId` | Teacher/session | yes | Queued resource that can become active |
+| `Participant` | `participantId` | Session | yes | User's role-scoped membership in a session |
+| `SessionEvent` | `eventId` | System | yes | Append-only fact in session timeline |
+| `Message` | `messageId` | Participant | yes | Raw student/teacher text input |
+| `Question` | `questionId` | Participant/system | yes | Question-like participation unit |
+| `QuestionCluster` | `clusterId` | System/teacher | yes | Grouped question theme surfaced to teacher/students |
+| `QuestionEndorsement` | `endorsementId` | Student | yes | Anonymous upvote/support signal |
+| `CursorVotePrompt` | `promptId` | Teacher/session | yes | Bounded spatial voting interaction |
+| `CursorVoteSample` | `sampleId` | Prompt/participant | optional | Sampled normalized pointer data |
+| `CursorVoteSummary` | `summaryId` | Prompt/system | yes | Aggregated cursor-vote result for replay |
+| `ModerationDecision` | `decisionId` | AI/system | yes | Audit record for message visibility action |
+| `TranscriptSegment` | `transcriptSegmentId` | Future audio pipeline | later | Teacher speech evidence |
 
-```text
-alex.chen@school.edu -> alex.chen
-```
+### 5.2 Session
 
-Students should not manually set display names in MVP.
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `id` | string | yes | Stable session identifier. MUST be unique. |
+| `title` | string | yes | Teacher-visible lesson title. |
+| `status` | enum | yes | `draft`, `live`, `ended`, or `archived`. |
+| `teacherId` | string | yes | Auth user ID of owner/facilitator. |
+| `joinCode` | string | yes | Human-shareable join token. MUST be unguessable enough for MVP privacy. |
+| `joinSlug` | string | optional | Friendly URL slug if available. |
+| `createdAt` | timestamp | yes | Creation time. |
+| `startedAt` | timestamp | conditional | Required after start. |
+| `endedAt` | timestamp | conditional | Required after end. |
+| `activeResourceId` | string/null | yes | Current teacher-selected resource. |
+| `interactionMode` | enum | yes | `none`, `cursor_vote`, future modes. |
 
-### Resource rendering strategy
+### 5.3 SessionResource
 
-Initial leaning: support URL resources in a controlled browser-like pane, with graceful fallback when embedding is blocked.
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `id` | string | yes | Stable resource ID. |
+| `sessionId` | string | yes | Owning session. |
+| `url` | string | yes | URL to render/open. MUST be validated. |
+| `title` | string | yes | Teacher-visible title. May be provided or inferred. |
+| `type` | enum | yes | `generic_url`, `google_slides`, `form`, `pdf`, `controlled_page`, `unknown`. |
+| `sortOrder` | number | yes | Queue ordering value. |
+| `embedMode` | enum | yes | `iframe`, `provider_embed`, `external_fallback`, `app_hosted`. |
+| `embedStatus` | enum | yes | `unchecked`, `embeddable`, `blocked`, `failed`, `unknown`. |
+| `createdAt` | timestamp | yes | Queue time. |
+| `activatedAt` | timestamp/null | optional | Last activation time. |
 
-Priority resource types:
+### 5.4 Participant
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `id` | string | yes | Stable membership ID. |
+| `sessionId` | string | yes | Joined session. |
+| `userId` | string | yes | Auth user ID. |
+| `role` | enum | yes | `teacher`, `student`, `assistant`, `ai`. |
+| `username` | string | yes | Live display name. For students, defaults to email local-part. |
+| `email` | string | yes/private | Stored privately. MUST NOT be shown to other students. |
+| `joinedAt` | timestamp | yes | First join time. |
+| `lastSeenAt` | timestamp | yes | Presence heartbeat or last activity. |
+| `chatStatus` | enum | yes | `allowed`, `warned`, `revoked`. |
+
+### 5.5 Message and Question
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `message.id` | string | yes | Raw text message ID. |
+| `message.sessionId` | string | yes | Owning session. |
+| `message.participantId` | string | yes | Author participant. |
+| `message.text` | string | yes | Original text. MUST be preserved for audit unless retention policy later changes. |
+| `message.visibility` | enum | yes | `pending`, `visible`, `author_only_rejected`, `hidden_from_students`, `admin_only`. |
+| `message.classificationStatus` | enum | yes | `pending`, `classified`, `failed`, `manual_review`. |
+| `question.id` | string | yes | Question object ID when message is question-like. |
+| `question.status` | enum | yes | `submitted`, `needs_review`, `clustered`, `surfaced_to_teacher`, `answered`, `dismissed`, `unresolved`. |
+| `question.activeResourceIdAtSubmission` | string/null | optional | Resource context. |
+| `question.addressedBy` | enum/null | optional | `teacher`, `ai`, `system`. |
+| `question.answerSummary` | string/null | optional | Human/AI answer summary. |
+
+### 5.6 QuestionCluster
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `id` | string | yes | Stable cluster ID. |
+| `sessionId` | string | yes | Owning session. |
+| `title` | string | yes | Short teacher/student visible theme. |
+| `summary` | string | yes | AI or system summary of the shared question. |
+| `status` | enum | yes | `open`, `surfaced`, `answered`, `dismissed`, `unresolved`. |
+| `questionIds` | string[] | yes | Member questions. |
+| `endorsementCount` | number | yes | Anonymous aggregate upvotes/support. |
+| `priorityScore` | number | yes | Ranking score; formula MAY be implementation-defined. |
+| `confidence` | number | optional | AI confidence from 0..1 when AI-created. |
+| `answerSummary` | string/null | optional | Stored when answered. |
+| `createdAt` | timestamp | yes | Creation time. |
+| `updatedAt` | timestamp | yes | Last mutation time. |
+
+---
+
+## 6. Session Lifecycle State Machine
+
+### 6.1 Session States
+
+| State | Meaning | Terminal? | Persisted? |
+|---|---|:---:|:---:|
+| `draft` | Teacher is preparing resources and settings | no | yes |
+| `live` | Students can participate in a running session | no | yes |
+| `ended` | Live interaction is closed; replay is available | no | yes |
+| `archived` | Session is retained but hidden from active lists | yes | yes |
+
+### 6.2 Legal Transitions
+
+| From | To | Trigger | Preconditions | Side effects |
+|---|---|---|---|---|
+| none | `draft` | teacher creates session | authenticated teacher | append `SessionCreated` |
+| `draft` | `live` | teacher starts session | at least zero resources; title present | append `SessionStarted`; enable join flow |
+| `live` | `ended` | teacher ends session | teacher owns session | append `SessionEnded`; close live prompts |
+| `ended` | `archived` | teacher archives | replay generated or not required | append `SessionArchived` |
+| `draft` | `archived` | teacher discards | teacher owns session | append `SessionArchived` |
+
+Illegal transitions MUST fail with an actionable error and MUST NOT partially mutate projections.
+
+---
+
+## 7. Event-Sourced Architecture
+
+### 7.1 Core Principle
+
+Blended MUST store an append-only `SessionEvent` log for each session. Current UI state MAY be stored as projections for performance, but replay and audit behavior MUST be reconstructable from events or documented summary events.
+
+### 7.2 Event Envelope
+
+Every session event MUST use a consistent envelope:
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `id` | string | yes | Unique event ID. |
+| `sessionId` | string | yes | Owning session. |
+| `type` | string | yes | Event type name. |
+| `schemaVersion` | integer | yes | Event payload version. |
+| `actorId` | string/null | yes | User/participant/system/AI actor. |
+| `actorRole` | enum | yes | `teacher`, `student`, `ai`, `system`, `unknown`. |
+| `occurredAt` | timestamp | yes | Client/server reconciled event time. |
+| `receivedAt` | timestamp | yes | Server/data-layer receipt time. |
+| `correlationId` | string | optional | Groups related AI or UI actions. |
+| `payload` | object | yes | Type-specific data. |
+
+### 7.3 Required MVP Event Types
+
+| Area | Event types |
+|---|---|
+| Session lifecycle | `SessionCreated`, `SessionStarted`, `SessionEnded`, `SessionArchived` |
+| Resources | `ResourceQueued`, `ResourceReordered`, `ResourceRemoved`, `ResourceEmbedChecked`, `ResourceActivated` |
+| Participants | `ParticipantJoined`, `ParticipantLeft`, `ParticipantReconnected`, `ParticipantPresenceUpdated` |
+| Messages | `ChatMessageSubmitted`, `MessageClassified`, `MessageVisibilityChanged`, `MessageUpvoted` |
+| Questions | `QuestionCreated`, `QuestionClusterCreated`, `QuestionAddedToCluster`, `QuestionSurfacedToTeacher`, `QuestionClusterAnswered`, `QuestionMarkedUnresolved` |
+| Cursor voting | `CursorVotePromptCreated`, `CursorVoteStarted`, `CursorVoteSampled`, `CursorVoteEnded`, `CursorVoteSummaryCreated` |
+| AI and moderation | `AIMessageClassified`, `AIQuestionReviewed`, `AIModerationDecisionCreated`, `AIClusterSuggested`, `AIAnswerMatchCreated` |
+| Replay | `ReplayProjectionGenerated` |
+
+### 7.4 Future Event Types
+
+Future transcription events MAY include `TranscriptSegmentCreated`, `TranscriptSegmentCorrected`, `SpokenAnswerDetected`, `TranscriptAnswerMatchCreated`, and `SpokenAnswerSummaryStored`.
+
+### 7.5 High-Volume Cursor Event Rule
+
+The implementation MUST NOT persist every pointer movement forever. Live cursor positions SHOULD use ephemeral realtime presence state. A cursor-vote prompt MAY sample positions during the prompt window and MUST persist either bounded samples, aggregate heatmaps, or summary clusters sufficient for replay.
+
+---
+
+## 8. Resource Rendering Contract
+
+### 8.1 Resource Activation
+
+Only teachers and authorized system actions MAY activate a global session resource. When a resource is activated:
+
+1. The system MUST validate that the resource belongs to the session.
+2. The system MUST append `ResourceActivated`.
+3. Student clients MUST update their active resource context.
+4. Existing student local scroll state MAY remain local unless a future follow-mode is enabled.
+
+### 8.2 Embedding and Fallback
+
+| Embed status | Required behavior |
+|---|---|
+| `embeddable` | Render in controlled pane with Blended overlay. |
+| `blocked` | Show fallback card with title, URL, and “open externally” action. |
+| `failed` | Show recovery instructions and allow retry. |
+| `unknown` | Attempt render with timeout and detect failure if feasible. |
+
+Blended MUST NOT silently show a blank resource pane. A blocked embed MUST produce a visible fallback and event evidence.
+
+### 8.3 Priority Resource Types
+
+The MVP SHOULD prioritize:
 
 - Google Slides
 - Gamma.app presentations
 - Reveal.js presentations
-- Slides.com presentations, since they are Reveal.js-based
-- generic embeddable web URLs where feasible
+- Slides.com presentations
+- Generic embeddable URLs
+- App-hosted static demo resources
 
-This is not the same as guaranteeing deep instrumentation of every web page. The MVP should control the surrounding viewport, active resource selection, overlays, and cursor-voting layer, while accepting that arbitrary embedded content may remain opaque.
+---
 
-### Cursor-voting instead of drawing
+## 9. Chat, Questions, and AI Triage
 
-Initial highlighting should be cursor-voting, not freehand annotation.
+### 9.1 Natural Input
 
-When the teacher enables cursor-voting mode:
+Students MUST be able to type naturally. They SHOULD NOT need to choose a message type before submitting. The system classifies after submission.
 
-- student cursors become partially transparent circles
-- pointer positions are tracked over the resource viewport
-- students “vote” or indicate confusion by hovering over a region
-- teacher sees live/aggregate attention
+Initial AI classification categories:
 
-This supports prompts like:
+| Category | Meaning | Possible behavior |
+|---|---|---|
+| `question` | Direct or implied request for explanation | Create question; cluster/surface |
+| `answer_response` | Student responding to teacher prompt | Keep visible; optionally summarize |
+| `peer_discussion` | Student-to-student discussion | Keep visible if appropriate |
+| `positive_feedback` | “got it”, “nice”, etc. | Keep visible or aggregate |
+| `agreement_support` | Endorsement of existing question/idea | Convert to upvote when matched |
+| `confusion_signal` | “I’m lost”, “what?” | Treat as question-like signal |
+| `off_topic_noise` | Irrelevant chatter | Deprioritize or moderate |
+| `abuse_or_profanity` | Unsafe/bad-vibes content | Hide from others; record decision |
+| `unclear` | Low confidence | Keep visible or request review |
+
+### 9.2 Question Cluster Rules
+
+1. Similar questions SHOULD be grouped into clusters.
+2. Clusters MUST preserve links to source questions/messages.
+3. Ranking SHOULD consider endorsement count, similarity count, recency, active resource relevance, repeated confusion language, and teacher pinning.
+4. A cluster marked answered MUST remain available in an answered section.
+5. Students SHOULD be able to mark a cluster still unresolved after an answer.
+6. Teacher-visible surfaces SHOULD prioritize clusters over raw stream reading.
+
+### 9.3 Answering Paths
+
+| Path | MVP? | Behavior |
+|---|:---:|---|
+| Teacher manual answered | yes | Teacher marks cluster answered; optional summary; append event. |
+| Teacher typed answer | yes | Teacher reply links to cluster; append answer event. |
+| AI from text context | yes/optional | AI suggests already-answered or summary from textual evidence; teacher may confirm. |
+| AI from transcription | no/future | AI matches spoken answer to cluster and stores summary with confidence. |
+
+---
+
+## 10. Moderation and Visibility
+
+### 10.1 Moderation Policy
+
+AI MAY moderate messages to reduce live-teaching burden. Moderation decisions MUST be auditable and MUST record category, confidence, reason, visibility outcome, and actor.
+
+### 10.2 Optimistic Display
+
+MVP behavior MAY be:
+
+1. Message appears optimistically to the author and possibly the room while validation is pending.
+2. If approved, it remains visible.
+3. If rejected, it becomes hidden from other students.
+4. The author still sees the rejected message struck through or otherwise marked.
+5. The teacher does not see rejected/problem messages during live presentation.
+6. Rejected/problem messages remain available in an end-of-session moderation log.
+
+### 10.3 Safety Requirements
+
+- The system MUST distinguish “hidden from students” from “deprioritized from teacher queue.”
+- The system MUST NOT delete moderation evidence during MVP unless a retention policy explicitly requires deletion.
+- A future strike policy MAY revoke chat privileges after repeated violations, but MVP SHOULD avoid irreversible punishment without teacher/admin review.
+
+---
+
+## 11. Cursor-Voting Contract
+
+### 11.1 Interaction Model
+
+When a teacher enables cursor-voting mode, students use a translucent cursor/marker over the active resource viewport to answer a spatial prompt such as:
 
 - “Point to the part you do not understand.”
 - “Hover over the answer you think is correct.”
 - “Show me where you got stuck.”
 - “Which section should we discuss next?”
 
-This is a good hackathon choice because it gives useful classroom signal without the complexity of drawing tools, semantic annotations, or iframe DOM inspection.
+### 11.2 Coordinate Rules
 
-### Real-time transcription / AI listening is later, but strategically important
+Cursor-vote samples MUST use normalized coordinates relative to the visible resource container.
 
-Do not let full real-time transcription hijack the first hackathon slice unless everything else is already working.
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `xNorm` | number | yes | 0..1 horizontal position in resource viewport. |
+| `yNorm` | number | yes | 0..1 vertical position in resource viewport. |
+| `viewportWidth` | number | yes | Client viewport/container width. |
+| `viewportHeight` | number | yes | Client viewport/container height. |
+| `resourceId` | string | yes | Active resource at sample time. |
+| `promptId` | string | yes | Active cursor-vote prompt. |
+| `sampledAt` | timestamp | yes | Sample time. |
 
-However, the product should be designed so teacher speech can later become first-class session evidence.
+Coordinates are approximate classroom signal, not precise semantic annotations. UI copy SHOULD avoid implying pixel-perfect correctness across devices.
 
-When AI listening/transcription exists, it should:
+### 11.3 Summary Rules
 
-- listen to the teacher's spoken presentation
-- detect when the teacher appears to answer an open question cluster
-- summarize the spoken answer
-- store the answer summary with the question group
-- mark the question cluster as addressed, ideally with confidence and timestamp
-- make the answer available for replay/review
+At prompt end, the system SHOULD store a `CursorVoteSummaryCreated` event with aggregate clusters/heatmap data. Summary data MUST be sufficient to explain the result in replay without needing every raw pointer movement.
 
-Transcription remains important for accessibility, replay, and richer AI context.
+---
 
-### First AI feature: message classification and question triage
+## 12. Authentication and Identity
 
-The first AI feature should help the teacher manage mixed student participation without drowning in the stream.
+### 12.1 Teacher Flow
 
-Students should be able to participate naturally rather than choosing rigid message types.
+1. Teacher arrives from marketing or app entry.
+2. Teacher enters email.
+3. System sends a magic link or code.
+4. Teacher authenticates.
+5. Teacher lands in dashboard.
+6. Dashboard guides teacher to create or resume sessions.
 
-Students can type normally, and the AI decides whether a message is:
+### 12.2 Student Flow
 
-- conversational response
-- peer discussion
-- question
-- confusion signal
-- positive feedback
-- noise/problem content
+1. Student opens a session join link.
+2. Student enters email.
+3. System sends a magic link or code.
+4. Student authenticates.
+5. Student lands directly in the target session.
 
-Questions and positive feedback can be upvoted by other students.
+### 12.3 Live Identity Display
 
-Upvotes are anonymous in the MVP. Upvoting primarily lends higher ranking to a question/cluster when multiple questions are arising for the teacher to see and respond to. The teacher sees aggregate priority, not which students upvoted.
+Initial student username MUST default to the email local-part.
 
-Students can also see the prevailing surfaced questions. On larger screens these can be pinned near the top of the chat/question area; on small mobile screens they may appear in a separate questions pane or tab.
+```text
+alex.chen@school.edu -> alex.chen
+```
 
-The AI should classify every student message and decide how it should affect the teacher dashboard.
+Students SHOULD NOT manually set display names in the MVP. Email MUST remain private/admin-only in live session views.
 
-Initial classification categories:
+---
 
-- question
-- answer/response to teacher
-- peer discussion
-- positive feedback
-- agreement/upvote-like support
-- confusion signal
-- off-topic/noise
-- profanity/abuse/bad vibes
-- unclear
+## 13. UI Surface Requirements
 
-For question-like messages, AI should determine:
+### 13.1 Teacher Dashboard
 
-1. Has this already been answered?
-2. Is it similar to other open questions?
-3. Should it be surfaced to the teacher?
-4. How many students are asking or endorsing the same question?
-5. If the teacher answers later, can the system mark the original question/cluster as addressed?
-6. Can the system send a useful answer summary back to the student or group of students?
+The teacher dashboard MUST support:
 
-Teachers will usually not type answers into chat. They are presenting. Question answering therefore has two paths:
+- Session create/edit/start/end.
+- Resource queue management.
+- Active resource control.
+- Participant awareness.
+- Ranked question clusters.
+- Manual answer/answered controls.
+- Cursor-voting prompt controls.
+- Basic replay/event-log access after end.
 
-- MVP/manual path: teacher clicks “Answered” on a question cluster, which moves it out of the active teacher queue and into an answered section, while preserving it for review/replay.
-- AI listening path: when live audio/transcription exists, the AI listens to the teacher's spoken answer, matches it to an open question cluster, summarizes the answer, stores it with the question group, marks the cluster addressed, and moves it into the answered section.
+### 13.2 Student Surface
 
-Similar questions should be grouped into clusters and ranked by priority. Two or more similar questions should be treated as a bundle with appropriate weighting, so the teacher responds to the theme rather than duplicate individual messages.
+The student surface MUST support:
 
-Question clusters should be visible to students as well as the teacher. Student-visible clusters help students recognize that their question is already represented and can be upvoted instead of repeated.
+- Active resource view.
+- Local scrolling/interactions where embedded resource permits.
+- Message/question input.
+- Surfaced question clusters and answered section.
+- Anonymous upvote/endorsement behavior.
+- Cursor-vote participation when active.
+- Mobile-responsive layout.
 
-When a question cluster is answered, it should not vanish entirely. It should move into an **Answered** section. This gives students a place to review what has already been addressed and lets late/momentarily distracted students catch up.
+### 13.3 Mockup Routes
 
-Answered section behavior:
+The repository currently includes `/mockups` with 20 static prototypes:
 
-- active/open clusters stay in the live questions area
-- answered clusters move to an answered section
-- if an answer summary exists, show it with the answered cluster
-- if the teacher manually marked it answered without a summary, show answered status and preserve it for later review/replay
-- students can use the answered section to avoid re-asking the same question
+- `/mockups/teacher/01` through `/mockups/teacher/10`
+- `/mockups/student/01` through `/mockups/student/10`
 
-Priority signals may include:
+Mockups are exploratory and MAY diverge in visual treatment, but any behavior selected for implementation SHOULD be reconciled back into this spec or a future architecture note.
 
-- number of similar questions
-- anonymous aggregate upvote count
-- repeated confusion language
-- relevance to the active resource
-- recency
-- teacher-pinned importance
+### 13.4 `/spec` Documentation Route
 
-The teacher dashboard should surface ranked question clusters rather than forcing the teacher to read the raw stream.
+The application MUST provide `/spec`, a route that converts `docs/SPEC.md` from Markdown to HTML at request/build time.
 
-AI should also filter or suppress noise, profanity, abuse, spam, and general bad vibes. For MVP, keep this conservative and auditable: store a moderation decision event with the reason/category, and distinguish between messages hidden from students versus merely deprioritized from the teacher queue.
+Requirements:
 
-Because transcription is deferred, the initial AI context can include:
+1. `/spec` MUST render this document's Markdown as HTML.
+2. The route SHOULD preserve headings, lists, tables, code blocks, links, and emphasis.
+3. The route SHOULD include a clear “Blended Specification” heading and link to the raw repository context if desired.
+4. The route MUST NOT require a separate CMS or manual HTML copy.
+5. The route MAY style the rendered document independently from product UI.
+6. For Review: production deployments SHOULD decide whether `/spec` is public, private, or disabled.
 
-- submitted student messages
-- submitted student questions
-- anonymous upvote counts
-- teacher-written answers/replies
-- pinned teacher responses
-- manually marked answered questions
-- session resource titles/metadata
-- previous question clusters
+---
 
-Later, when transcription exists, transcript segments become the main evidence source for “the teacher answered this.”
+## 14. Configuration and Environment
 
-## 4. Hackathon MVP Shape
+### 14.1 Required MVP Environment
 
-For a 2-week hackathon, the goal should be a convincing vertical slice, not the whole platform.
+| Key | Context | Required | Description |
+|---|---|:---:|---|
+| `PUBLIC_INSTANTDB_APP_ID` | client | yes | InstantDB app identifier used by client-side realtime/auth integration. |
+| `AI_API_KEY` or provider-specific equivalent | server | optional MVP | Needed only when live AI classification is enabled. |
+| `AI_MODEL` | server | optional | Model selection if provider supports it. |
 
-### MVP promise
+Secrets MUST NOT be committed. Public client IDs are not passwords, but environment files SHOULD still be gitignored to avoid environment drift.
 
-A teacher can create a live session, queue web resources, invite students, switch the active resource, receive student questions, run a cursor-voting prompt, and end the session with a basic replay/event log.
+### 14.2 Package and Runtime
 
-### Suggested demo story
+The app is an Astro/React web application. The repo SHOULD converge on one package manager policy. If pnpm is used, `pnpm-lock.yaml` SHOULD be committed to make installs reproducible.
 
-1. Teacher creates a session called “Photosynthesis Review.”
-2. Teacher queues three resources:
-   - a slide deck URL
-   - a web article URL
-   - a form/checkpoint URL
-3. Teacher starts the session.
-4. Students join from a link using email magic-code authentication.
-5. Teacher switches between resources.
-6. Students chat/respond naturally, and some ask similar questions.
-7. AI classifies the mixed stream, filters bad/noisy messages, and clusters/ranks the important questions.
-8. Teacher enables cursor-voting: “Hover over the part of the diagram that is confusing.”
-9. Student translucent cursors appear over the resource.
-10. Teacher sees a cluster around one area and addresses it.
-11. Session ends.
-12. Replay shows resource switches, questions, answers/status, and cursor-voting summary.
+---
 
-## 5. Event-Sourced Architecture Notes
+## 15. Failure Model and Recovery
 
-### Core event stream principle
+| Failure class | Examples | Detection | Required behavior | Retry? |
+|---|---|---|---|:---:|
+| Blocked embed | CSP/X-Frame-Options | iframe load timeout/error | Show fallback card; append/embed status event | no/manual |
+| Realtime disconnect | network loss | presence heartbeat/client state | Show reconnecting state; replay missed events | yes |
+| Auth email delay | magic code not received | user report/timeout | Allow resend and typo correction | yes |
+| AI timeout | provider 429/503/timeout | AI client | Mark classification pending/failed; do not block chat indefinitely | yes/backoff |
+| Bad AI moderation | false positive/negative | user/teacher review | Preserve event; allow later review/override | manual |
+| Duplicate message submit | double click/retry | idempotency key | De-duplicate or mark same client action | no |
+| Cursor sample flood | high pointer rate | rate monitor | Throttle/sample; keep summary | yes/throttle |
+| Event projection drift | projection does not match log | replay/checksum/test | Rebuild projection from events | manual/automatic |
+| Demo resource unavailable | URL down/blocked | preflight/demo check | Use seeded fallback resource | manual |
 
-The app should store an append-only event log for each session.
+---
 
-A session replay should be generated by applying events in timestamp order.
+## 16. Security, Privacy, and Operational Safety
 
-### Candidate event types
+1. The system MUST protect student email addresses from student-facing live views.
+2. The system MUST treat session join codes as bearer access to a bounded session and SHOULD make them unguessable.
+3. The system MUST validate resource URLs before storing or rendering them.
+4. The system SHOULD prevent `javascript:` and other unsafe URL schemes.
+5. The system MUST redact or avoid logging secrets and provider API keys.
+6. AI prompts MUST treat student messages and resource metadata as untrusted input.
+7. AI output MUST be parsed/validated before it mutates moderation, classification, or cluster state.
+8. The app SHOULD preserve moderation evidence for teacher/admin review while avoiding live exposure of harmful content.
+9. The system SHOULD rate-limit message submission, cursor samples, and AI calls.
+10. The system SHOULD provide demo-safe seed data that does not include real student personal data.
 
-Session lifecycle:
+---
 
-- `SessionCreated`
-- `SessionStarted`
-- `SessionEnded`
+## 17. Reference Algorithms
 
-Resource management:
+### 17.1 Applying Events to a Session Projection
 
-- `ResourceQueued`
-- `ResourceReordered`
-- `ResourceRemoved`
-- `ResourceActivated`
+```text
+function rebuild_session_projection(session_id):
+  events = load_events(session_id).sort_by(occurredAt, receivedAt, id)
+  projection = empty_session_projection()
 
-Participants:
+  for event in events:
+    validate_event_envelope(event)
+    projection = apply_event(projection, event)
 
-- `ParticipantJoined`
-- `ParticipantLeft`
-- `ParticipantReconnected`
+  return projection
+```
 
-Interaction modes:
+### 17.2 Handling a Student Message
 
-- `InteractionModeChanged`
-- `CursorVoteStarted`
-- `CursorVoteEnded`
+```text
+function submit_student_message(session_id, participant_id, text, client_action_id):
+  assert session.status == live
+  assert participant.chatStatus == allowed
+  assert not duplicate_client_action(client_action_id)
 
-Chat/questions:
+  message = create_message(text, visibility="pending")
+  append_event(ChatMessageSubmitted(message))
 
-- `ChatMessageSubmitted`
-- `StudentMessageUpvoted`
-- `QuestionSubmitted`
-- `QuestionClusterCreated`
-- `QuestionMarkedAlreadyAnswered`
-- `QuestionSurfacedToTeacher`
-- `TeacherMarkedQuestionClusterAnswered`
-- `TeacherAnsweredQuestion`
-- `QuestionMarkedAddressed`
-- `QuestionAnswerSummaryStored`
-- `StudentMarkedQuestionUnresolved`
+  enqueue_ai_classification(message.id)
+  return message
+```
 
-Cursor voting:
+### 17.3 AI Classification Worker
 
-- `CursorVotePromptCreated`
-- `CursorVotePositionSampled`
-- `CursorVoteSummaryCreated`
+```text
+function classify_message(message_id):
+  message = load_message(message_id)
+  context = build_ai_context(message.sessionId, message.activeResourceId)
+  result = call_ai_classifier(message.text, context)
+  parsed = validate_classifier_result(result)
 
-AI:
+  append_event(AIMessageClassified(message_id, parsed.category, parsed.confidence))
 
-- `AIQuestionReviewed`
-- `AIMessageClassified`
-- `AIAnswerMatchCreated`
-- `AIModerationDecisionCreated`
-- `MessageVisibilityChanged`
-- `StudentChatStrikeIssued`
-- `StudentChatRevoked`
+  if parsed.moderation.reject:
+    append_event(AIModerationDecisionCreated(message_id, parsed.moderation))
+    append_event(MessageVisibilityChanged(message_id, "author_only_rejected"))
+  else:
+    append_event(MessageVisibilityChanged(message_id, "visible"))
 
-Future transcription:
+  if parsed.category is question_like:
+    question = create_or_update_question(message, parsed)
+    cluster = find_or_create_question_cluster(question)
+    append_cluster_events(question, cluster)
+```
 
-- `TranscriptSegmentCreated`
-- `TranscriptSegmentCorrected`
-- `TranscriptAnswerMatchCreated`
-- `SpokenAnswerDetected`
-- `SpokenAnswerSummaryStored`
+### 17.4 Ending a Cursor Vote
 
-### High-volume event warning
+```text
+function end_cursor_vote(prompt_id, teacher_id):
+  prompt = load_prompt(prompt_id)
+  assert prompt.status == active
+  assert teacher_owns_session(teacher_id, prompt.sessionId)
 
-Do not persist every pointer movement forever.
+  samples = load_bounded_samples(prompt_id)
+  summary = aggregate_cursor_samples(samples)
 
-Recommended pattern:
+  append_event(CursorVoteEnded(prompt_id))
+  append_event(CursorVoteSummaryCreated(prompt_id, summary))
+```
 
-- live cursor positions use ephemeral presence/realtime state
-- explicit cursor-voting prompts can sample positions
-- replay stores summaries, heatmaps, or sampled points for the prompt window
+---
 
-## 6. Candidate Data Model
+## 18. Hackathon MVP Plan
 
-Working entities:
+### Days 1–2: Technical Spike
 
-- `sessions`
-- `sessionResources`
-- `participants`
-- `sessionEvents`
-- `messages`
-- `questions`
-- `questionClusters`
-- `questionAnswerMatches`
-- `cursorVotePrompts`
-- `cursorVoteSamples` or `cursorVoteSummaries`
-- later: `transcriptSegments`
+- Validate InstantDB auth/realtime fit in Astro.
+- Validate resource rendering and fallback behavior.
+- Validate active resource sync between teacher and student clients.
+- Validate cursor overlay over an embedded or app-hosted resource.
+- Confirm mockup direction for teacher and student surfaces.
 
-### Session
+### Days 3–5: Session Lifecycle and Resource Queue
 
-Fields:
+- Create session.
+- Queue/reorder/remove resources.
+- Generate join link.
+- Start/end session.
+- Activate resource.
+- Append core session/resource events.
 
-- `id`
-- `title`
-- `status`: draft | live | ended | archived
-- `teacherId`
-- `joinCode` / `joinSlug`
-- `createdAt`
-- `startedAt`
-- `endedAt`
-- `activeResourceId`
-- `interactionMode`
+### Days 6–7: Auth and Identity
 
-### SessionResource
-
-Fields:
-
-- `id`
-- `sessionId`
-- `url`
-- `title`
-- `type`: generic_url | google_slides | form | pdf | controlled_page | unknown
-- `sortOrder`
-- `createdAt`
-- `activatedAt` optional
-
-### Participant
-
-Fields:
-
-- `id`
-- `sessionId`
-- `userId`
-- `role`: teacher | student | assistant | ai
-- `username`
-- `email` private/admin only
-- `joinedAt`
-- `lastSeenAt`
-
-### Question
-
-Fields:
-
-- `id`
-- `sessionId`
-- `participantId`
-- `text`
-- `status`: submitted | needs_review | already_answered | clustered | surfaced_to_teacher | answered | dismissed | unresolved
-- `activeResourceIdAtSubmission`
-- `createdAt`
-- `addressedAt`
-- `addressedBy`: ai | teacher | system
-- `answerSummary`
-
-### CursorVotePrompt
-
-Fields:
-
-- `id`
-- `sessionId`
-- `teacherId`
-- `activeResourceId`
-- `promptText`
-- `startedAt`
-- `endedAt`
-- `status`
-
-### CursorVoteSample/Summary
-
-Fields:
-
-- `promptId`
-- `participantId` optional if individual samples are retained
-- `xNorm`
-- `yNorm`
-- `viewportWidth`
-- `viewportHeight`
-- `timestamp`
-- aggregated cluster/heatmap data for summary
-
-## 7. Technical Shape for Hackathon
-
-Likely stack direction:
-
-- Web-first, mobile-responsive application rather than installed native mobile app.
-- AstroJS application stack, starting from the user's existing Astro kickstart repo: `Timothyjoh/astro-kickstart`.
-- Teacher dashboard should be browser/web-first.
-- Student experience should be mobile-responsive web, optimized for phones but not requiring an app install.
-- InstantDB is the chosen realtime/auth/data backbone for the hackathon.
-- AI API for message classification, question clustering, moderation, and later answer matching.
-- Email magic-link/code flow via InstantDB auth.
-
-Earlier Expo/React Native thinking is deprioritized unless Expo Web proves useful. The product benefits from low-friction browser access: teachers and students should be able to click a link and participate immediately.
-
-### Repository workflow decision
-
-Decision: Blended should be forked/copied from `Timothyjoh/astro-kickstart`, but not before refreshing the kickstart itself.
-
-Workflow:
-
-1. Update dependencies in `Timothyjoh/astro-kickstart`. — Completed in commit `db779a0`.
-2. Run install/build/verification on the kickstart. — Completed: `npm run build` and `npm audit`.
-3. Commit and push the updated dependencies back to `astro-kickstart`. — Pushed to `main`.
-4. Fork/copy from the updated kickstart to start the Blended project. — Local working copy created at `~/wrk/blended`; public GitHub repo created at `https://github.com/timothyjoh/blended`.
-5. Begin Blended-specific branding, schema, and implementation work in the new fork/project. — Started with `/mockups` index plus 10 teacher/presenter and 10 student/chat prototype routes using Tailwind + shadcn/ui components.
-
-Rationale: keep the reusable starter healthy first, then start Blended from a clean modern base.
-
-## 8. Major Risks
-
-### Arbitrary URL embedding
-
-Some URLs will refuse iframe embedding due to CSP or X-Frame-Options.
-
-Mitigations:
-
-- detect embed failures
-- display graceful fallback
-- allow “open externally” fallback
-- prioritize known embeddable resource types for demo
-- later add controlled resources like PDFs/images/app-hosted pages
-
-### Student interactions inside iframe are opaque
-
-If students interact with arbitrary embedded content, the app may not know what they clicked or typed.
-
-For MVP, that is acceptable. The app only needs to know:
-
-- active resource
-- student question/chat
-- cursor-voting position over the container
-
-### Cursor-voting coordinate mismatch
-
-Different devices and viewport sizes can make exact coordinate comparison messy.
-
-Mitigations:
-
-- use normalized x/y coordinates
-- store viewport metadata
-- treat cursor-voting as approximate visual feedback
-- use aggregate clusters rather than precise annotations
-
-### AI answer matching without transcription
-
-Without teacher speech transcription, AI can only know answers from textual teacher replies, pinned responses, chat, or manual teacher marks.
-
-Mitigation:
-
-- initial AI should be modest and cautious
-- distinguish AI-inferred from teacher-confirmed
-- let students mark “still unresolved”
-
-### Scope creep
-
-The product naturally wants to become Zoom + Miro + Canvas + Otter + Discord.
-
-Do not let it.
-
-Hackathon vertical slice should focus on:
-
-1. session lifecycle
-2. resource queue/switching
-3. student join/auth
-4. questions
-5. cursor-voting
-6. event log/replay foundation
-
-## 9. Unresolved Product Questions
-
-### Teacher authentication
-
-Decision: teachers use the same email magic link/code mechanism as students.
-
-Difference in routing:
-
-- teacher authenticates from marketing page -> dashboard -> create first session
-- student authenticates from join link -> existing session
-
-Later option: Google Workspace / school SSO.
-
-### Resource rendering priority
-
-Decision: start with a controlled browser-like pane and fallback behavior.
-
-Priority supported presentation/resource formats:
-
-- Google Slides
-- Gamma.app presentations
-- Reveal.js presentations
-- Slides.com presentations
-- generic embeddable web URLs where feasible
-
-This means the app controls the active resource, viewport wrapper, and interaction overlay, but does not promise full DOM access inside every external site.
-
-### Student email visibility
-
-Decision: preserve email in the database, but show only derived username during the live session.
-
-- teacher sees username live
-- other students see username live
-- canonical email remains stored privately for auth/admin/export needs
-
-### Teacher force-sync behavior
-
-Should teacher be able to force student scroll position?
-
-Options:
-
-- never
-- only in presentation/follow mode
-- always when teacher chooses
-
-Current leaning: not in MVP. Teacher controls active resource only; students scroll independently.
-
-### Chat behavior
-
-Decision: support natural student participation. Students should not have to explicitly mark a message as chat vs question. They type normally, and AI classifies the message.
-
-The raw student stream may include:
-
-- responses to the teacher
-- peer discussion
-- lightweight reactions
-- explicit or implicit questions
-- positive feedback
-- duplicate/similar questions
-- anonymous upvotes or endorsements of another student's question
-- anonymous upvotes on positive feedback
-- noise, profanity, spam, or bad vibes
-
-AI should classify every message, filter/suppress bad content, group similar questions, and surface ranked question clusters to the teacher and students.
-
-Prevailing question clusters should be easy to find:
-
-- desktop/tablet: pinned near the top of the chat/question area
-- mobile: separate questions pane/tab if the chat window is too constrained
-
-Moderation display behavior:
-
-- When a student submits a message, it can appear optimistically while the LLM validates it.
-- The author continues to see their own moderated message, but crossed out/struck through if it is deemed in poor taste.
-- Other students may briefly see the message during validation.
-- If the LLM marks it as poor taste, profanity, abuse, spam, or bad vibes, the message is hidden from everyone except the author after validation.
-- The teacher does not see rejected/problem messages during the live presentation.
-- Rejected/problem messages are available only in an end-of-session moderation log.
-- The moderation event should be recorded with category/reason and visibility outcome.
-- Later, this can evolve into a “3 strikes and you are out” policy where repeated violations revoke the student's chat privileges.
-
-The teacher should not have to manually inspect the full stream to find the important questions.
-
-### AI authority
-
-Decision: AI can hide messages from the shared student view after validation when they are deemed inappropriate.
-
-Behavior:
-
-- Messages may appear optimistically while validation is pending.
-- If approved, message remains visible normally.
-- If rejected, message is hidden from other students.
-- The author still sees their own rejected message, displayed struck through.
-- Moderation decisions are recorded as events.
-- The teacher does not see rejected/moderated problem messages during the live presentation.
-- During the live session, the teacher view should stay focused on positive participation and surfaced question clusters.
-- Rejected/moderated messages are available to the teacher only in an end-of-session moderation log.
-- Future escalation can track strikes and revoke chat access after repeated violations.
-
-Rationale: the AI exists to remove this burden from the teacher during live instruction. The teacher should not be forced into disciplinary triage mid-presentation.
-
-### Replay depth
-
-What is enough replay for hackathon?
-
-Possible minimum:
-
-- show chronological event log
-- reconstruct active resource changes
-- show question timeline
-- show cursor-voting prompt summary
-
-Not required for hackathon:
-
-- full video replay
-- audio replay
-- full pointer-stream playback
-- transcript replay
-
-## 10. Suggested 2-Week Hackathon Plan
-
-### Days 1–2: Technical spike
-
-Goals:
-
-- Validate InstantDB auth/realtime fit in AstroJS.
-- Validate `Timothyjoh/astro-kickstart` as the base project.
-- Validate resource rendering in a web-first, mobile-responsive client.
-- Validate cursor overlay over an embedded/controlled URL.
-- Confirm teacher dashboard and student views can both work cleanly in browser.
-
-Outputs:
-
-- minimal session object
-- one teacher view
-- one student view
-- active resource sync proof
-- known-good demo resource URLs
-
-### Days 3–5: Session lifecycle and resource queue
-
-Build:
-
-- create session
-- queue resources
-- join link
-- start/end session
-- activate resource
-- student view updates live
-- append session events
-
-### Days 6–7: Student auth and identity
-
-Build:
-
-- email magic link/code join
-- derived username
-- participant list
-- reconnect handling if feasible
+- Email magic-link/code join.
+- Derived username.
+- Participant list.
+- Basic reconnect handling.
 
 ### Days 8–9: Questions
 
-Build:
+- Student message/question submission.
+- Teacher question dashboard.
+- Manual cluster answered state.
+- Event logging.
 
-- question submission
-- teacher question dashboard
-- question status transitions
-- event logging
+### Days 10–11: Cursor Voting
 
-### Days 10–11: Cursor-voting
+- Teacher starts cursor-vote prompt.
+- Student translucent cursor overlay.
+- Normalized pointer tracking.
+- Teacher aggregate view.
+- Summary event on prompt end.
 
-Build:
+### Days 12–13: AI Assistant and Replay
 
-- teacher starts cursor-vote prompt
-- student translucent cursor overlay
-- normalized pointer tracking
-- teacher sees live cursor positions or aggregate
-- summary event emitted when prompt ends
+- AI message classification.
+- Basic clustering/review pipeline.
+- Moderation decision events.
+- Basic replay/event timeline.
 
-### Days 12–13: AI question assistant and replay
+### Day 14: Demo Polish
 
-Build:
+- Scripted demo session.
+- Seed resources.
+- Fallback if external resources fail.
+- Crisp narrative and stable mockup references.
 
-- simple AI cluster/review pipeline
-- likely already-answered detection from textual context
-- student “still unresolved” action
-- basic replay/event timeline view
+---
 
-### Day 14: Demo polish
+## 19. Demo Narrative
 
-Polish:
-
-- scripted demo session
-- seeded resources
-- clean landing/join flow
-- explain event-sourced replay clearly
-- prepare fallback if external URL embedding fails
-
-## 11. Demo Narrative
-
-The demo should make the value obvious in under three minutes.
+The demo MUST make the value obvious in under three minutes.
 
 Suggested pitch:
 
-> Teachers are overwhelmed by managing slides, chat, questions, and student confusion at the same time. Blended turns a live classroom session into an event-sourced learning timeline. The teacher controls the lesson resources, students participate without taking over the session, and AI helps keep questions from getting lost.
+> Teachers are overwhelmed by managing slides, chat, questions, and student confusion at the same time. Blended turns a live classroom session into an event-sourced learning timeline. The teacher controls the lesson resources, students participate without taking over the session, and AI keeps important questions from getting lost.
 
 Demo beats:
 
 1. Teacher creates “Biology Review.”
 2. Teacher queues slides, article, and form.
-3. Students join through magic-code email auth.
+3. Students join through email magic-code auth.
 4. Teacher activates first resource.
-5. Students ask similar questions.
-6. AI clusters them.
-7. Teacher enables cursor-vote: “Show me where this is confusing.”
-8. Cursors cluster around one diagram area.
-9. Teacher answers and marks question addressed.
-10. Student sees their question addressed.
-11. Session replay shows resources, question timeline, and cursor-vote summary.
+5. Students ask similar questions naturally.
+6. AI clusters and ranks them.
+7. Teacher starts cursor-vote: “Show me where this is confusing.”
+8. Student markers cluster around one diagram area.
+9. Teacher answers and marks the cluster addressed.
+10. Student sees the answer state.
+11. Replay shows resources, questions, answer states, and cursor-vote summary.
 
-## 12. Next Spec Work
+---
 
-Next documents likely needed:
+## 20. Test and Validation Matrix
 
-1. `blended-technical-architecture.md`
-   - exact InstantDB schema
-   - auth flow
-   - event model
-   - client views
-   - AI pipeline
+| Requirement area | Validation |
+|---|---|
+| Session lifecycle | Create/start/end/archive produce legal states and events. |
+| Resource queue | Queue/reorder/remove/activate changes projection and appends events. |
+| Embed fallback | Known blocked URL shows fallback instead of blank pane. |
+| Student join | Join link routes student into correct session after auth. |
+| Identity privacy | Student emails do not appear in live student/teacher participant display unless explicitly admin-only. |
+| Message submission | Natural text appears pending then visible/rejected based on moderation. |
+| AI classification | Classifier output validates against expected category schema. |
+| Question clustering | Similar messages group into a cluster with source links preserved. |
+| Manual answered | Teacher can mark cluster answered without AI transcription. |
+| Cursor voting | Samples use normalized coordinates and generate summary event. |
+| Replay | Replay/event timeline reconstructs key events in chronological order. |
+| Rate limiting | Message/cursor floods do not break session state. |
+| `/mockups` | Mockup index and 20 routes render successfully. |
+| `/spec` | Markdown in `docs/SPEC.md` renders as HTML at `/spec`. |
+| Build | `pnpm run build` or equivalent passes before push. |
 
-2. `blended-hackathon-plan.md`
-   - day-by-day build plan
-   - concrete tasks
-   - demo script
-   - risk fallbacks
+---
 
-3. `blended-demo-script.md`
-   - seed data
-   - teacher/student actions
-   - narration
-   - fallback paths
+## 21. Definition of Done
 
-4. `blended-event-model.md`
-   - canonical event names
-   - event payload schemas
-   - replay reducer notes
+### 21.1 Required for Hackathon Demo
 
-## 13. Current North Star
+- [ ] Teacher can create a session.
+- [ ] Teacher can queue at least three resources.
+- [ ] Teacher can start/end session.
+- [ ] Student can join through a session link.
+- [ ] Teacher can activate a resource and student view updates.
+- [ ] Student can submit natural-language messages/questions.
+- [ ] Teacher can see surfaced question clusters or a credible approximation.
+- [ ] Teacher can manually mark a cluster answered.
+- [ ] Cursor-voting prompt can start/end and show visible aggregate signal.
+- [ ] Replay/event log shows session lifecycle, resource switches, question states, and cursor-vote summary.
+- [ ] Blocked resources have a visible fallback.
+- [ ] Demo has seeded fallback data/resources.
+- [ ] `/mockups` and `/spec` routes render.
+
+### 21.2 Required for Production Hardening
+
+- [ ] Formal InstantDB schema and migration policy.
+- [ ] Auth and authorization tests.
+- [ ] Data retention policy for events, messages, moderation records, and emails.
+- [ ] AI provider abstraction with validated structured outputs.
+- [ ] Human review/override path for moderation decisions.
+- [ ] Observability dashboard for session health, AI failures, realtime disconnects, and embed failures.
+- [ ] Accessibility review for teacher and student surfaces.
+- [ ] Package manager policy and reproducible lockfile strategy.
+- [ ] Load/rate testing for cursor voting and large classes.
+- [ ] Security review for URL rendering, prompt injection, and private data exposure.
+
+---
+
+## 22. Current North Star
 
 Build the smallest believable version of:
 
