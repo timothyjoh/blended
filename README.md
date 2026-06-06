@@ -58,7 +58,45 @@ the schema once with `npx instant-cli push schema` — otherwise every
 is not silent).
 
 Set `PUBLIC_INSTANTDB_APP_ID` in `.env` (copy `.env.example`) — it is the only
-required environment variable, used by both the Todo demo and the event spine.
+required environment variable for the app, used by the Todo demo, the event
+spine, and the sign-in gate.
+
+## Sign-in (email magic code)
+
+The app has a working passwordless sign-in gate at **`/login`**. A person enters
+their email, receives a magic code, enters it, and lands in a signed-in view
+that shows their derived username (email local-part) and a sign-out control. The
+signed-in state survives a page reload; sign-out returns to the email form. On
+first sign-in exactly one `users` row is created — keyed to the InstantDB auth
+user id, `username` = email local-part, `adminLevel: 0` — routed through
+`writeEvent()` (idempotent across repeat sign-ins). All auth state flows through
+the shared `useAuth` hook (`src/lib/useAuth.ts`); product code never calls
+`db.useAuth()` directly.
+
+To exercise it locally: set `PUBLIC_INSTANTDB_APP_ID` in `.env`, push the schema
+to your Instant app once (`npx instant-cli push schema`) so `users` writes are
+accepted, run `npm run dev`, and visit `/login`.
+
+The Playwright auth suite (`e2e/auth.spec.ts`) needs a deterministic code path,
+so it mints codes via the InstantDB **admin** SDK (`generateMagicCode` — no
+email sent). Set `INSTANT_ADMIN_TOKEN` (e2e-only; see `.env.example`) before
+`npm run test:e2e`; when it is unset the auth suite skips loudly rather than
+passing falsely.
+
+### Known limitations
+
+- The `useAuth` integration path (island → hook → InstantDB auth → keyed
+  `users` upsert) is verified only by the Playwright auth suite, which skips
+  until `INSTANT_ADMIN_TOKEN` and a pushed live schema are provisioned. Until
+  then this path has no runnable gate; the pure decision logic in
+  `src/lib/auth.ts` is unit-covered, but the runtime creation/retry effect is
+  not.
+- First-sign-in `users`-row creation is fail-safe but **silent** on a
+  projection-query error: if the `users` lookup in `useAuth` errors, the row is
+  not created (avoiding a duplicate/partial write) and no signal is currently
+  surfaced or logged, so a persistent query failure can leave a signed-in user
+  without a `users` row. Downstream username/role reads should not assume the
+  row always exists.
 
 ## Resources
 

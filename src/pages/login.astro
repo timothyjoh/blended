@@ -1,0 +1,13 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import AuthGate from '@/components/AuthGate'
+
+// Product sign-in gate (SPEC §42) — a shipped surface, not dev-gated. Route
+// guarding and redirects are out of scope this cycle; `index.astro` is untouched.
+---
+
+<Layout title="Sign in — Blended">
+  <div class="mx-auto mt-12 w-full max-w-sm px-4">
+    <AuthGate client:only="react" />
+  </div>
+</Layout>

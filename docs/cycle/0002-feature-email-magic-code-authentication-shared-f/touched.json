@@ -1,0 +1,17 @@
+{
+  "files": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "package-lock.json",
+    "package.json",
+    "src/components/AuthGate.tsx",
+    "src/lib/auth.test.ts",
+    "src/lib/auth.ts",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/useAuth.ts",
+    "src/pages/login.astro",
+    "vitest.config.ts"
+  ]
+}

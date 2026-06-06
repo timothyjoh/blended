@@ -5,6 +5,7 @@
     "AGENTS.md",
     "README.md",
     "astro.config.mjs",
+    "docs/cycle/0001-feature-foundation-blended-instantdb-schema-writ/BUILD.md",
     "package-lock.json",
     "package.json",
     "src/components/EventSpineHarness.tsx",

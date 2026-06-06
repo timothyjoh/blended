@@ -87,6 +87,23 @@ describe('applyEvent', () => {
     applyEvent(base, sessionCreated)
     expect(base.session).toBeNull()
   })
+
+  it('does NOT fold an identity-scope UserSignedIn event into a session', () => {
+    // Locks the cycle-0002 decision: identity events (written under the
+    // IDENTITY_SCOPE sentinel by useAuth) live outside the session fold. If
+    // someone ever adds a UserSignedIn case here, this guard fails loudly so
+    // identity writes are never accidentally projected into a session.
+    const identityEvent: EventLike = {
+      id: 'evt-identity',
+      type: 'UserSignedIn',
+      occurredAt: 1,
+      receivedAt: 1,
+      payload: { userId: 'auth-1', username: 'jane' },
+    }
+    expect(() => applyEvent(emptyProjection('identity'), identityEvent)).toThrow(
+      UnknownEventTypeError
+    )
+  })
 })
 
 describe('rebuildSessionProjection determinism', () => {

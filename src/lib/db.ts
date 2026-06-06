@@ -218,6 +218,10 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
       }
     }
     default:
+      // Identity-scope events (e.g. `UserSignedIn`, written under the
+      // `IDENTITY_SCOPE` sentinel by `useAuth`) are intentionally NOT folded
+      // here — they belong to no real session, so they never reach this fold.
+      // Reaching the default with one means a genuine log/projection divergence.
       throw new UnknownEventTypeError(event.type)
   }
 }

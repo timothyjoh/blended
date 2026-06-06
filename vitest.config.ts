@@ -15,7 +15,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/lib/**/*.ts'],
-      exclude: ['src/**/*.test.ts'],
+      // The unit-coverage scope is pure-logic modules. `useAuth.ts` is a React
+      // hook seam (calls `db.useAuth()` / `db.useQuery()` — needs a React runtime
+      // + live InstantDB client); its pure decision logic is extracted to
+      // `auth.ts` (unit-covered) and the hook itself is exercised by the
+      // Playwright auth suite (`e2e/auth.spec.ts`), consistent with how the
+      // `.tsx` React islands are already outside this scope.
+      exclude: ['src/**/*.test.ts', 'src/lib/useAuth.ts'],
       reporter: ['text', 'json-summary'],
     },
   },
