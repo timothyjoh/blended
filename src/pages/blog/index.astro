@@ -14,9 +14,9 @@ const blogPosts = allPosts
     title: post.data.title,
     description: post.data.description,
     date: post.data.date.toISOString().split('T')[0],
-    slug: post.slug,
+    slug: post.id.replace(/\.(md|mdx)$/, ''),
     tags: post.data.tags,
-    readTime: `${Math.ceil(post.body.length / 1000)} min read`, // Rough estimate
+    readTime: `${Math.ceil((post.body?.length ?? 0) / 1000)} min read`, // Rough estimate
     author: post.data.author
   }));
 ---

@@ -32,7 +32,7 @@ function App() {
   const { todos } = data
   return (
     <main>
-      <TodoForm todos={todos} />
+      <TodoForm />
       <TodoList todos={todos} />
       <ActionBar todos={todos} />
     </main>
@@ -59,27 +59,21 @@ function toggleDone(todo: Todo) {
   db.transact(db.tx.todos[todo.id].update({ done: !todo.done }))
 }
 
-function deleteCompleted(todos: Todo[]) {
-  const completed = todos.filter((todo) => todo.done)
-  const txs = completed.map((todo) => db.tx.todos[todo.id].delete())
-  db.transact(txs)
-}
-
-function toggleAll(todos: Todo[]) {
-  const newVal = !todos.every((todo) => todo.done)
-  db.transact(todos.map((todo) => db.tx.todos[todo.id].update({ done: newVal })))
-}
-
 // Components
 // ----------
-function TodoForm({ todos }: { todos: Todo[] }) {
+function TodoForm() {
   return (
     <div>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          addTodo(e.target.elements['todoinput'].value)
-          e.target[0].value = ''
+          const form = e.currentTarget
+          const input = form.elements.namedItem('todoinput')
+          if (!(input instanceof HTMLInputElement) || !input.value.trim()) {
+            return
+          }
+          addTodo(input.value)
+          input.value = ''
         }}
       >
         <label className="label font-sans">

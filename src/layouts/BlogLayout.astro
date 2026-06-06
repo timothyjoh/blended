@@ -181,6 +181,10 @@ const storageKey = THEME_STORAGE_KEY
         const toc = document.getElementById('toc');
         const headings = document.querySelectorAll('article h2, article h3, article h4');
         
+        if (!toc) {
+          return;
+        }
+
         if (headings.length === 0) {
           toc.innerHTML = '<span class="text-gray-400">No headings found</span>';
           return;
@@ -203,14 +207,19 @@ const storageKey = THEME_STORAGE_KEY
       // Reading Progress
       function updateReadingProgress() {
         const article = document.querySelector('article');
+        const progressBar = document.getElementById('reading-progress');
+        const progressText = document.getElementById('progress-text');
+
+        if (!article || !progressBar || !progressText) {
+          return;
+        }
+
         const scrollTop = window.scrollY;
         const docHeight = article.offsetHeight;
         const winHeight = window.innerHeight;
         const scrollPercent = (scrollTop / (docHeight - winHeight)) * 100;
         const clampedPercent = Math.min(Math.max(scrollPercent, 0), 100);
         
-        const progressBar = document.getElementById('reading-progress');
-        const progressText = document.getElementById('progress-text');
         progressBar.style.width = clampedPercent + '%';
         progressText.textContent = Math.round(clampedPercent) + '%';
       }
