@@ -20,6 +20,10 @@ import {
   buildQuestion,
   buildQuestionAnswer,
   answerQuestion,
+  SESSION_LIST_TITLE_FALLBACK,
+  sessionDisplayTitle,
+  compareSessionsForList,
+  type SessionListRow,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -917,5 +921,75 @@ describe('answerQuestion wrapper', () => {
     await answerQuestion(ok, { write: write as never })
     expect(calls[0][0]).toBe('QuestionAnswered')
     expect(calls[0][2]).toHaveLength(1)
+  })
+})
+
+describe('SessionList display helpers (cycle 0012)', () => {
+  describe('sessionDisplayTitle', () => {
+    it('returns a normal title trimmed of surrounding whitespace', () => {
+      expect(sessionDisplayTitle('Algebra — Lesson 3')).toBe('Algebra — Lesson 3')
+      expect(sessionDisplayTitle('  Padded title  ')).toBe('Padded title')
+    })
+
+    it('falls back to the placeholder for empty / whitespace-only / null / undefined', () => {
+      expect(sessionDisplayTitle('')).toBe(SESSION_LIST_TITLE_FALLBACK)
+      expect(sessionDisplayTitle('   ')).toBe(SESSION_LIST_TITLE_FALLBACK)
+      expect(sessionDisplayTitle(null)).toBe(SESSION_LIST_TITLE_FALLBACK)
+      expect(sessionDisplayTitle(undefined)).toBe(SESSION_LIST_TITLE_FALLBACK)
+    })
+
+    it('never returns a blank string (totality over hostile input)', () => {
+      for (const hostile of ['', ' ', '\t', '\n', null, undefined]) {
+        expect(sessionDisplayTitle(hostile).trim()).not.toBe('')
+      }
+    })
+  })
+
+  describe('compareSessionsForList', () => {
+    const row = (id: string, createdAt?: number | null): SessionListRow => ({ id, createdAt })
+
+    it('orders distinct createdAt ascending (oldest first)', () => {
+      const rows = [row('b', 300), row('a', 100), row('c', 200)]
+      expect([...rows].sort(compareSessionsForList).map((r) => r.id)).toEqual(['a', 'c', 'b'])
+    })
+
+    it('tie-breaks equal createdAt deterministically by id', () => {
+      const rows = [row('z', 100), row('a', 100), row('m', 100)]
+      expect([...rows].sort(compareSessionsForList).map((r) => r.id)).toEqual(['a', 'm', 'z'])
+    })
+
+    it('treats missing / null createdAt as 0 (no NaN) and falls back to the id tie-break', () => {
+      const rows = [row('b', undefined), row('a', null), row('c', 5)]
+      // a and b both sort as 0 → id tie-break (a before b); c has a later timestamp.
+      expect([...rows].sort(compareSessionsForList).map((r) => r.id)).toEqual(['a', 'b', 'c'])
+    })
+
+    it('produces no NaN comparisons for fully absent timestamps', () => {
+      expect(compareSessionsForList(row('a'), row('b'))).toBe(-1)
+      expect(compareSessionsForList(row('b'), row('a'))).toBe(1)
+      expect(compareSessionsForList(row('a'), row('a'))).toBe(0)
+    })
+
+    it('sorts an empty list to []', () => {
+      expect(([] as SessionListRow[]).sort(compareSessionsForList)).toEqual([])
+    })
+
+    it('is stable and total across a mixed hostile fixture', () => {
+      const rows: SessionListRow[] = [
+        row('d', 200),
+        row('a', null),
+        row('c', 100),
+        row('b', undefined),
+        row('e', 100),
+      ]
+      // 0-timestamp rows (a,b) first by id, then createdAt=100 (c,e) by id, then d.
+      expect([...rows].sort(compareSessionsForList).map((r) => r.id)).toEqual([
+        'a',
+        'b',
+        'c',
+        'e',
+        'd',
+      ])
+    })
   })
 })

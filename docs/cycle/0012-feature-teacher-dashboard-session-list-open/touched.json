@@ -1,0 +1,10 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "src/components/SessionList.tsx",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts",
+    "src/pages/dashboard/index.astro"
+  ]
+}

@@ -134,6 +134,21 @@ you its teacher — there is no special account type; any signed-in user can cre
 one. A blank or whitespace-only title is rejected inline and creates nothing. The
 join code is a shareable bearer token for the (later) join-via-link flow.
 
+## Your sessions on the dashboard
+
+The teacher dashboard is now a home base for the sessions you own. On
+`/dashboard`, below **New session**, a live **Your sessions** list shows every
+session you created — each with its title and current status
+(`draft`/`live`/`ended`) — and clicking any row opens that session's
+facilitation view (`/dashboard/sessions/<id>`). The list updates in **realtime**:
+create a session in another tab, or watch a session's status change, and the row
+appears or updates on screen with no manual reload. The list is scoped to the
+sessions **you** own (another teacher's sessions never appear), shows title and
+status only (never any email), and renders explicit loading, empty ("you don't
+own any sessions yet"), and error states rather than a blank region. The e2e
+suite (`e2e/dashboard-session-list.spec.ts`) reuses `INSTANT_ADMIN_TOKEN` and
+skips loudly when it is unset.
+
 ## Starting and ending a session
 
 A created `draft` session is no longer a dead end. From the post-create card,

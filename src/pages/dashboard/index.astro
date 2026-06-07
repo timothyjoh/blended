@@ -2,6 +2,7 @@
 import Layout from '@/layouts/Layout.astro'
 import RouteGuard from '@/components/RouteGuard'
 import NewSession from '@/components/NewSession'
+import SessionList from '@/components/SessionList'
 
 // Protected dashboard. The route guard (cycle 0004) gates the shell; the
 // `NewSession` island (cycle 0005) is the first product surface that durably
@@ -10,6 +11,11 @@ import NewSession from '@/components/NewSession'
 // `RouteGuard` renders its children (authenticated), exactly as `dashboard-root`
 // is already gated. `client:only="react"` because the guard reads client-held
 // auth state.
+//
+// `SessionList` (cycle 0012) mounts beside `NewSession`, also nested inside
+// `RouteGuard` so it hydrates only when authenticated. It is the teacher's home
+// base: a realtime, owner-scoped list of the sessions they own, each clickable
+// into the facilitation view at `/dashboard/sessions/:id`.
 ---
 
 <Layout title="Dashboard — Blended">
@@ -17,6 +23,7 @@ import NewSession from '@/components/NewSession'
     <RouteGuard client:only="react">
       <h1 data-testid="dashboard-root" class="text-2xl font-semibold">Dashboard</h1>
       <NewSession client:only="react" />
+      <SessionList client:only="react" />
     </RouteGuard>
   </div>
 </Layout>

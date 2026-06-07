@@ -745,3 +745,42 @@ export async function answerQuestion(
   await write('QuestionAnswered', plan.meta, [buildTxn(plan.record)])
   return plan.record
 }
+
+// ---------------------------------------------------------------------------
+// SessionList display helpers (cycle 0012). Pure, db-free, total — extracted so
+// the dashboard list's stable ordering and title fallback are unit-testable in
+// isolation. Mirrors the inline comparator in SessionLifecycle (createdAt asc,
+// tie-break by id) but is the SOLE shared copy SessionList uses; the existing
+// inline copies are intentionally left untouched (SPEC scopes the extraction to
+// SessionList only).
+// ---------------------------------------------------------------------------
+
+/** Minimal shape the list orders/renders — a `sessions` projection row subset. */
+export type SessionListRow = {
+  id: string
+  title?: string | null
+  status?: string | null
+  createdAt?: number | null
+}
+
+/** Placeholder for a row whose projection is missing a usable title (SPEC §94). */
+export const SESSION_LIST_TITLE_FALLBACK = '(untitled session)'
+
+/** Non-blank display title — trims, falls back when null/empty/whitespace. */
+export function sessionDisplayTitle(title: string | null | undefined): string {
+  const t = (title ?? '').trim()
+  return t === '' ? SESSION_LIST_TITLE_FALLBACK : t
+}
+
+/**
+ * Stable comparator: oldest-first by `createdAt`, tie-broken by `id` for a
+ * deterministic order without a server-side index. Total over hostile input —
+ * a missing/`null` `createdAt` sorts as 0 so equal/absent timestamps fall back
+ * to the id tie-break rather than producing NaN/unstable order.
+ */
+export function compareSessionsForList(a: SessionListRow, b: SessionListRow): number {
+  const ca = a.createdAt ?? 0
+  const cb = b.createdAt ?? 0
+  if (ca !== cb) return ca - cb
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
