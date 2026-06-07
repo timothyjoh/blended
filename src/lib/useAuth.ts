@@ -7,6 +7,7 @@ import {
   deriveUsername,
   shouldCreateUserRow,
 } from '@/lib/auth'
+import { ADMIN_LEVEL_NONE } from '@/lib/admin'
 
 // ---------------------------------------------------------------------------
 // The SINGLE app-wide auth seam (SPEC §38). Every teacher/student/admin passes
@@ -34,6 +35,9 @@ export function useAuth(): UseAuth {
   const authUserId = user?.id ?? null
   // Guards against a double-fire of the creation effect under fast re-render.
   const inFlight = useRef(false)
+  // One-shot latch so the server-side admin bootstrap fires at most once per
+  // authenticated session (the endpoint is also idempotent server-side).
+  const bootstrapped = useRef(false)
 
   // Query the `users` projection by auth id to drive the create-only-if-absent
   // guard. `null` query when signed out → InstantDB skips it.
@@ -69,7 +73,10 @@ export function useAuth(): UseAuth {
         db.tx.users[authUserId as string].update({
           email: email ?? undefined,
           username,
-          adminLevel: 0,
+          // First-sign-in creation writes the NON-elevated level. The client can
+          // NEVER write `'uber'` — the tightened `users` rule rejects it; the
+          // elevated write happens only server-side via `/api/admin/bootstrap`.
+          adminLevel: ADMIN_LEVEL_NONE,
           createdAt: Date.now(),
         }),
       ]
@@ -84,6 +91,31 @@ export function useAuth(): UseAuth {
         inFlight.current = false
       })
   }, [authUserId, usersLoaded, existingUserCount, email])
+
+  // Server-side admin bootstrap (cycle 0019). POST the caller's InstantDB token
+  // to `/api/admin/bootstrap` ONCE per authenticated session; the endpoint
+  // verifies the token and — only for an `ADMIN_EMAILS`-allowlisted email —
+  // elevates the user to `uber` via the admin SDK (bypassing rules), recorded as
+  // an `AdminBootstrapped` event. The route guard reads the PERSISTED
+  // `adminLevel` from the live `users` row (not this fetch's response), so admin
+  // access reflects the durable state regardless of fetch timing. Any failure
+  // (unreachable endpoint, non-2xx, admin SDK unavailable → 500) is logged and
+  // the user degrades to non-admin — sign-in and the rest of the app stay usable;
+  // the error is surfaced, never swallowed, and never throws into render.
+  const refreshToken = (user as { refresh_token?: string } | null | undefined)?.refresh_token
+  useEffect(() => {
+    if (!authUserId || !refreshToken || bootstrapped.current) return
+    bootstrapped.current = true
+    fetch('/api/admin/bootstrap', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: refreshToken }),
+    })
+      .then((r) => {
+        if (!r.ok) console.error('[useAuth] admin bootstrap failed:', r.status)
+      })
+      .catch((err: unknown) => console.error('[useAuth] admin bootstrap request failed:', err))
+  }, [authUserId, refreshToken])
 
   return {
     user,

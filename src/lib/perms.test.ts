@@ -11,9 +11,23 @@ import { schema } from './db'
 describe('permission rules (structural guard)', () => {
   it('users: own-row-only view/create/update, never deletable — protects private email', () => {
     expect(rules.users.allow.view).toBe('auth.id == data.id')
-    expect(rules.users.allow.create).toBe('auth.id == data.id')
-    expect(rules.users.allow.update).toBe('auth.id == data.id')
+    expect(rules.users.allow.create).toBe("auth.id == data.id && data.adminLevel == 'none'")
+    expect(rules.users.allow.update).toBe("auth.id == data.id && newData.adminLevel == 'none'")
     expect(rules.users.allow.delete).toBe('false')
+  })
+
+  it('users: a client can never write a non-none adminLevel (no self-elevation to uber)', () => {
+    // The elevated `'uber'` value is only ever written server-side via the admin
+    // SDK (which bypasses these rules); a client create/update must pin
+    // `adminLevel == 'none'`. Guard both ops AND that UPDATE checks the
+    // POST-merge `newData` (so a no-op update can't preserve a forged uber row).
+    for (const op of ['create', 'update'] as const) {
+      expect(rules.users.allow[op]).toContain("adminLevel == 'none'")
+      expect(rules.users.allow[op]).toContain('auth.id == data.id')
+      // The rule must never admit the elevated value from the client.
+      expect(rules.users.allow[op]).not.toContain("'uber'")
+    }
+    expect(rules.users.allow.update).toContain('newData.adminLevel')
   })
 
   it('sessions: owner-only writes (not open), reads open', () => {

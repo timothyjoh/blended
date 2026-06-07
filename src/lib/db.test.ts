@@ -6,6 +6,7 @@ import {
   emptyProjection,
   compareEvents,
   writeEvent,
+  buildEventEnvelope,
   schema,
   UnknownEventTypeError,
   type EventLike,
@@ -998,5 +999,57 @@ describe('writeEvent input validation (throws before any transaction)', () => {
       // @ts-expect-error intentionally wrong type
       writeEvent('SessionCreated', validMeta, undefined)
     ).toThrow(/non-empty array/)
+  })
+})
+
+describe('buildEventEnvelope (shared §7.2 envelope shape)', () => {
+  const now = 1_700_000_000_000
+
+  it('stamps all §7.2 fields, defaults schemaVersion to 1, payload to {}, omits correlationId', () => {
+    const env = buildEventEnvelope(
+      'AdminBootstrapped',
+      { sessionId: 'identity', actor: { id: 'u1', role: 'system' }, payload: { userId: 'u1' } },
+      now
+    )
+    expect(env).toEqual({
+      sessionId: 'identity',
+      type: 'AdminBootstrapped',
+      schemaVersion: 1,
+      actorId: 'u1',
+      actorRole: 'system',
+      occurredAt: now,
+      receivedAt: now,
+      payload: { userId: 'u1' },
+    })
+    // correlationId is omitted entirely (not set to undefined) when absent.
+    expect('correlationId' in env).toBe(false)
+  })
+
+  it('honors supplied occurredAt/receivedAt/schemaVersion/correlationId and defaults payload', () => {
+    const env = buildEventEnvelope(
+      'X',
+      {
+        sessionId: 's1',
+        actor: { id: null, role: 'unknown' },
+        payload: undefined as unknown as Record<string, unknown>,
+        schemaVersion: 3,
+        occurredAt: 10,
+        receivedAt: 20,
+        correlationId: 'corr-1',
+      },
+      now
+    )
+    expect(env).toEqual({
+      sessionId: 's1',
+      type: 'X',
+      schemaVersion: 3,
+      // a null actor.id collapses to undefined (no actorId stored)
+      actorId: undefined,
+      actorRole: 'unknown',
+      occurredAt: 10,
+      receivedAt: 20,
+      correlationId: 'corr-1',
+      payload: {},
+    })
   })
 })

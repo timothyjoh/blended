@@ -1,0 +1,25 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import AdminRouteGuard from '@/components/AdminRouteGuard'
+
+// Admin landing (cycle 0019, ADR-0003). The FIRST cross-session, account-level
+// capability: who you are (your global `adminLevel`), not which session you own,
+// decides what you can reach. `AdminRouteGuard` (a nested `client:only="react"`
+// island, mirroring `/dashboard`) reads the signed-in user's own `users` row and
+// folds its `adminLevel` through `authorizeAdmin` — only an `uber` admin renders
+// the landing; everyone else gets `RouteGuard`'s `route-guard-denied`, and an
+// unauthenticated visitor bounces to `/login`. `client:only="react"` because the
+// guard reads client-held auth state. Elevation to `uber` only ever happens
+// server-side via `/api/admin/bootstrap` against the `ADMIN_EMAILS` allowlist.
+---
+
+<Layout title="Admin — Blended">
+  <div class="mx-auto mt-12 w-full max-w-2xl px-4">
+    <AdminRouteGuard client:only="react">
+      <h1 data-testid="admin-root" class="text-2xl font-semibold">Admin</h1>
+      <p class="mt-2 text-sm text-muted-foreground">
+        You have global admin access. Observability surfaces arrive in a later cycle.
+      </p>
+    </AdminRouteGuard>
+  </div>
+</Layout>

@@ -8,6 +8,8 @@
 // `src/lib/auth.ts` (the `.tsx` islands stay outside unit scope, like useAuth).
 // ---------------------------------------------------------------------------
 
+import { ADMIN_LEVEL_UBER, normalizeAdminLevel } from './admin'
+
 /** Role-aware default landing for an authenticated visit with no valid target. */
 export const DEFAULT_LANDING = '/dashboard'
 
@@ -50,4 +52,23 @@ export function authorizeOwnership(input: {
   if (input.loading) return 'loading'
   if (!input.userId || !input.ownerId) return 'denied'
   return input.userId === input.ownerId ? 'authorized' : 'denied'
+}
+
+/**
+ * Pure global-admin verdict for the `/admin` guard (cycle 0019). Mirrors
+ * {@link authorizeOwnership}'s ordering exactly: `error` wins over `loading`
+ * (a failing query never hangs on a spinner), then — once resolved —
+ * `authorized` ONLY when the (normalized) admin level is `uber`, else `denied`.
+ * `adminLevel` is folded through {@link normalizeAdminLevel}, so a legacy
+ * numeric/absent/garbage value is treated as `none` (denied). Total — never
+ * throws.
+ */
+export function authorizeAdmin(input: {
+  adminLevel: unknown
+  loading: boolean
+  error: boolean
+}): AuthzDecision {
+  if (input.error) return 'denied' // error beats loading
+  if (input.loading) return 'loading'
+  return normalizeAdminLevel(input.adminLevel) === ADMIN_LEVEL_UBER ? 'authorized' : 'denied'
 }

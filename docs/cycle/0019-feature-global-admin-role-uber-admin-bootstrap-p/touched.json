@@ -1,0 +1,22 @@
+{
+  "files": [
+    ".env.example",
+    "AGENTS.md",
+    "README.md",
+    "package-lock.json",
+    "package.json",
+    "src/components/AdminRouteGuard.tsx",
+    "src/components/PermsProbe.tsx",
+    "src/lib/admin.test.ts",
+    "src/lib/admin.ts",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/perms.test.ts",
+    "src/lib/perms.ts",
+    "src/lib/routing.test.ts",
+    "src/lib/routing.ts",
+    "src/lib/useAuth.ts",
+    "src/pages/admin.astro",
+    "src/pages/api/"
+  ]
+}

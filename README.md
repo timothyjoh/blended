@@ -351,6 +351,39 @@ write nothing (the fallback is local to their view).
 the owner-only resource-write rule already exist). The e2e suite is
 `e2e/blocked-embed-fallback.spec.ts`.
 
+## Admin access (the `/admin` route + `ADMIN_EMAILS` allowlist)
+
+Blended now has its first **global**, account-level capability: an **uber admin**
+who is authorized against the system as a whole, distinct from the per-session
+Teacher/Student roles. There is a new protected route, **`/admin`**, that only an
+uber admin can reach — every other signed-in user sees **"You don't have access,"**
+and an unauthenticated visitor bounces to `/login`.
+
+You become an uber admin by **allowlist, server-side, on sign-in** — never by
+editing your own account. Add your email to **`ADMIN_EMAILS`** (a **server-only**
+comma/whitespace-separated list — note there is **no `PUBLIC_` prefix**, so it
+never reaches the browser), then sign in normally with the email magic code. On
+sign-in the app calls a server endpoint (`POST /api/admin/bootstrap`) that verifies
+your InstantDB token and, **only** if your verified email is on the allowlist,
+elevates your account to `uber` using the admin SDK (which bypasses the client
+permission rules) — recording the elevation as a replayable `AdminBootstrapped`
+event. An **empty or unset `ADMIN_EMAILS` means nobody is bootstrapped.**
+
+This is deliberately **unforgeable from the client**: the `users` permission rule
+forbids any client write that sets a non-`'none'` `adminLevel`, so you cannot make
+yourself an admin by editing your own row — the elevated write happens *only*
+server-side against the allowlist. If the admin endpoint is unreachable or the
+server admin token is unset, sign-in and the rest of the app keep working; you
+simply remain a non-admin (the failure is logged, never silent).
+
+`ADMIN_EMAILS` is a **new server-only `.env` key** (see `.env.example`); the
+elevated write also relies on the existing server-only `INSTANT_ADMIN_TOKEN`. This
+cycle changes the `users.adminLevel` field type and tightens the `users` rule, so
+it requires **`npx instant-cli push schema`** and **`npm run perms:push`**. The
+e2e suite is `e2e/admin-route.spec.ts` (skips loudly without admin env). **Deferred:**
+an existing admin promoting another user, the admin observability/event-replay
+screens, and organization/group-scoped admins.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed

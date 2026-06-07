@@ -4,6 +4,7 @@ import {
   safeNextPath,
   loginRedirectTarget,
   authorizeOwnership,
+  authorizeAdmin,
 } from './routing'
 
 describe('DEFAULT_LANDING', () => {
@@ -95,5 +96,34 @@ describe('authorizeOwnership', () => {
     ['', 'u1', 'empty user id'],
   ])('denies when ids are absent: user=%p owner=%p (%s)', (userId, ownerId, _label) => {
     expect(authorizeOwnership({ userId, ownerId, loading: false, error: false })).toBe('denied')
+  })
+})
+
+describe('authorizeAdmin', () => {
+  it('authorizes ONLY an uber admin', () => {
+    expect(authorizeAdmin({ adminLevel: 'uber', loading: false, error: false })).toBe('authorized')
+  })
+
+  it('reports loading while the query is unresolved', () => {
+    expect(authorizeAdmin({ adminLevel: undefined, loading: true, error: false })).toBe('loading')
+  })
+
+  // Failure path: error wins over loading so a failing query never hangs.
+  it('denies on query error even while loading', () => {
+    expect(authorizeAdmin({ adminLevel: 'uber', loading: true, error: true })).toBe('denied')
+  })
+
+  // A non-uber level (incl. legacy numeric / absent / garbage) is denied.
+  it.each([
+    ['none', 'explicit non-elevated'],
+    [0, 'legacy numeric placeholder'],
+    [1, 'legacy numeric one'],
+    [undefined, 'absent'],
+    [null, 'null'],
+    ['UBER', 'wrong case'],
+    ['admin', 'unknown string'],
+    [{}, 'object'],
+  ])('denies a non-uber level %p (%s)', (level, _label) => {
+    expect(authorizeAdmin({ adminLevel: level, loading: false, error: false })).toBe('denied')
   })
 })

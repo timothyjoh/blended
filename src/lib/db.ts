@@ -1,4 +1,5 @@
 import { id, i, init, type InstaQLEntity, type TransactionChunk } from '@instantdb/react'
+import type { AdminLevel } from './admin'
 
 // ---------------------------------------------------------------------------
 // Blended data spine — the SINGLE source of the InstantDB schema and client.
@@ -42,7 +43,13 @@ export const schema = i.schema({
       email: i.string().optional(),
       username: i.string(),
       // Global admin level, separate from per-session Participant.role (ADR-0003).
-      adminLevel: i.number(),
+      // The NAMED domain value `'none' | 'uber'` (cycle 0019, src/lib/admin.ts);
+      // the elevated `'uber'` is only ever written server-side via the admin SDK
+      // (the tightened `users` rule forbids a client from writing it).
+      // `normalizeAdminLevel` tolerates legacy numeric/absent values at READ time
+      // (they degrade to `'none'`), so the field-type change needs no data
+      // migration — just `npx instant-cli push schema`.
+      adminLevel: i.string<AdminLevel>(),
       createdAt: i.number(),
     }),
     sessions: i.entity({
@@ -689,18 +696,36 @@ export function writeEvent(
   }
 
   const now = Date.now()
-  const eventTx = db.tx.sessionEvents[id()].update({
+  const eventTx = db.tx.sessionEvents[id()].update(buildEventEnvelope(type, meta, now))
+
+  // Single transaction: event append + projection update(s) commit together.
+  return db.transact([eventTx, ...projectionTxns])
+}
+
+/**
+ * Build the §7.2 `SessionEvent` envelope fields object — the SHARED, pure
+ * envelope shape used by BOTH the client choke point (`writeEvent`) and the
+ * server-side admin endpoint (`/api/admin/bootstrap`), so they emit identical
+ * envelopes (cycle 0019). Assumes already-validated input — all runtime
+ * validation stays in `writeEvent` before any transaction. Stamps `occurredAt`/
+ * `receivedAt` from `now` when not supplied, defaults `schemaVersion` to `1`,
+ * omits `correlationId` when absent, and defaults `payload` to `{}`. Pure —
+ * returns a plain object, issues no transaction.
+ */
+export function buildEventEnvelope(
+  type: string,
+  meta: WriteEventMeta,
+  now: number
+): Record<string, unknown> {
+  return {
     sessionId: meta.sessionId,
     type,
-    schemaVersion,
+    schemaVersion: meta.schemaVersion ?? 1,
     actorId: meta.actor.id ?? undefined,
     actorRole: meta.actor.role,
     occurredAt: meta.occurredAt ?? now,
     receivedAt: meta.receivedAt ?? now,
     ...(meta.correlationId ? { correlationId: meta.correlationId } : {}),
     payload: meta.payload ?? {},
-  })
-
-  // Single transaction: event append + projection update(s) commit together.
-  return db.transact([eventTx, ...projectionTxns])
+  }
 }

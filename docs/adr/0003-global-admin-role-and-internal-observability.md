@@ -10,6 +10,6 @@ The first level is **uber admin**, which can see and observe all Sessions and sy
 
 ## Consequences
 
-- Admin authorization is checked against a global `User.adminLevel`, separate from `Participant.role`. Bootstrapping the first uber admin is via an env allowlist of admin emails (For Review).
+- Admin authorization is checked against a global `User.adminLevel` (the named domain value `'none' | 'uber'`), separate from `Participant.role`. The first uber admin is bootstrapped on sign-in via the server-only `ADMIN_EMAILS` env allowlist: the elevated `adminLevel: 'uber'` write happens exclusively server-side through `@instantdb/admin` in `POST /api/admin/bootstrap` (which bypasses the permission rules), and the tightened `users` rule forbids any client from writing a non-`'none'` level — so admin status is unforgeable from the client. Elevation is recorded as a replayable `AdminBootstrapped` event.
 - All product mutations MUST flow through `writeEvent()` so the event log is a complete interaction record; ad-hoc projection writes would create observability blind spots.
 - **Future (noted, not built):** organizations/groups with org-scoped admins who observe only their organization's sessions. The global uber-admin level is the only one built now.

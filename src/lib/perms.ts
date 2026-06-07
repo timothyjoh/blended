@@ -45,10 +45,18 @@ const rules = {
     // ONLY here). The `users` row id IS the auth id, so first-sign-in creation
     // (`db.tx.users[authUserId].update(...)`) satisfies `data.id == auth.id` and
     // remains permitted. No user row is ever deletable by a client.
+    //
+    // ADMIN ELEVATION IS UNFORGEABLE (cycle 0019, ADR-0003): a client may
+    // create/update its OWN row ONLY with a non-elevated `adminLevel == 'none'`.
+    // `data.adminLevel` is the object on create; `newData.adminLevel` the
+    // post-merge object on update — so no client write can ever set (or preserve
+    // via a no-op update) `'uber'`. The elevated write happens EXCLUSIVELY
+    // server-side via `@instantdb/admin` (which bypasses these rules) in
+    // `/api/admin/bootstrap`. Admin authorization is therefore not client-forgeable.
     allow: {
       view: 'auth.id == data.id',
-      create: 'auth.id == data.id',
-      update: 'auth.id == data.id',
+      create: "auth.id == data.id && data.adminLevel == 'none'",
+      update: "auth.id == data.id && newData.adminLevel == 'none'",
       delete: 'false',
     },
   },

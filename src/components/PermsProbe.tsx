@@ -129,6 +129,27 @@ export default function PermsProbe() {
     }
   }
 
+  // Self-elevation rejection (cycle 0019): a raw client write setting the
+  // SIGNED-IN user's OWN `users.adminLevel` to `'uber'`. The tightened `users`
+  // rule (`newData.adminLevel == 'none'`) rejects it — the elevated value is only
+  // ever writable server-side via the admin SDK. The promise rejects and we
+  // render the permission error (never swallowed); the spec then re-reads the row
+  // via `queryAdmin` and asserts `adminLevel` is unchanged.
+  function selfElevate() {
+    setWriteResult('…')
+    if (!user?.id) {
+      surface(setWriteResult, new Error('not signed in'))
+      return
+    }
+    try {
+      db.transact(db.tx.users[user.id].update({ adminLevel: 'uber' }))
+        .then(() => setWriteResult('ok'))
+        .catch((err: unknown) => surface(setWriteResult, err))
+    } catch (err) {
+      surface(setWriteResult, err)
+    }
+  }
+
   // Deny-by-default proof (cycle 0013): a raw write to an UNDECLARED namespace.
   // Under the global `$default: 'false'` rule the live app rejects it — the
   // promise rejects and we render the permission error (never swallowed). This
@@ -209,6 +230,9 @@ export default function PermsProbe() {
         </button>
         <button data-testid="probe-write-undeclared" onClick={writeUndeclared} className="btn">
           Write undeclared entity (raw)
+        </button>
+        <button data-testid="probe-self-elevate" onClick={selfElevate} className="btn">
+          Self-elevate to uber (raw)
         </button>
       </div>
       <p>
