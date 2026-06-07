@@ -1,0 +1,16 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "release-notes.md",
+    "src/components/JoinSession.tsx",
+    "src/components/StudentSession.tsx",
+    "src/lib/db.ts",
+    "src/lib/perms.test.ts",
+    "src/lib/perms.ts",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts",
+    "src/pages/join/",
+    "src/pages/s/"
+  ]
+}

@@ -137,6 +137,16 @@ export const schema = i.schema({
       forward: { on: 'sessionResources', has: 'one', label: 'session' },
       reverse: { on: 'sessions', has: 'many', label: 'resources' },
     },
+    // Cycle 0007: make `participants` ownership checkable against the REAL parent
+    // session (not a client-supplied field) so the tightened create/update/delete
+    // rule can require `auth.id in data.ref('session.teacherId')` for the owning
+    // teacher — exactly mirroring `sessionResourceSession`. The join write sets
+    // the forward `session` link; the reverse `participants` label lets a session
+    // enumerate its participant rows (used by the presence/status view).
+    participantSession: {
+      forward: { on: 'participants', has: 'one', label: 'session' },
+      reverse: { on: 'sessions', has: 'many', label: 'participants' },
+    },
   },
 })
 

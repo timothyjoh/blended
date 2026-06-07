@@ -89,15 +89,27 @@ const rules = {
     },
   },
 
-  // Participant rows carry NO email anymore (privacy is structural — see
-  // db.ts). Writable by any authenticated participant (the join-via-link cycle
-  // creates these rows); reads open so the roster is visible.
+  // Owner-scoped (cycle 0007), closing the fail-open hole flagged in AGENTS.md
+  // BEFORE any participant row exists. Mirrors `sessionResources`: `isOwnRow`
+  // admits a user managing their OWN row (`auth.id == data.userId`, which is what
+  // a legitimate self-join sets); `isSessionOwner` admits the owning teacher,
+  // checked against the LINKED parent session's `teacherId` (forgery-proof — the
+  // client cannot fake the link traversal); `isAdmin` reserves the future
+  // client-admin slot (false today; the admin SDK bypasses rules). A signed-in
+  // user can no longer create/update/delete a participant row they don't own.
+  // Reads stay open so presence/roster is visible. Rows carry NO email by design
+  // (privacy is structural — the field does not exist on the entity; see db.ts).
   participants: {
+    bind: [
+      'isOwnRow', 'auth.id == data.userId',
+      'isSessionOwner', "auth.id in data.ref('session.teacherId')",
+      'isAdmin', 'false',
+    ],
     allow: {
       view: 'true',
-      create: 'auth.id != null',
-      update: 'auth.id != null',
-      delete: 'auth.id != null',
+      create: 'isOwnRow || isSessionOwner || isAdmin',
+      update: 'isOwnRow || isSessionOwner || isAdmin',
+      delete: 'isOwnRow || isSessionOwner || isAdmin',
     },
   },
 }

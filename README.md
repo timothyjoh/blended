@@ -152,8 +152,32 @@ any illegal or stale transition (e.g. ending a session that is not live) is
 rejected with an inline error and the status is left unchanged — no half-applied
 transition. Each transition appends a `SessionStarted` / `SessionEnded` event
 alongside the projection update in a single write, so a rejected transition
-leaves no partial state. (A real student join-via-link flow is a later cycle;
-this cycle ships the join-enablement gate, not the join itself.)
+leaves no partial state.
+
+## Joining a session
+
+Students can now join a **live** session via its link and land in the session
+view. Open a teacher-shared link `/join/<joinCode>`: if you are not signed in you
+are bounced to `/login` and returned to the link after entering a magic code. On a
+live session you are added as a participant and routed to the student session view
+`/s/<joinCode>`, which **live-syncs**: a student who joins *after* others
+immediately sees the session's current shared state (its live status and the set
+of present participants) with no manual refresh. Your display name is your email
+**local-part only** — participant rows never store or show your email.
+
+Joining is **idempotent**: reloading or re-opening the link as an already-joined
+student routes you straight in without creating a second participant. Opening a
+link for an **unknown** session shows a clear "session not found" state, and a link
+for a **non-live** (draft or ended) session shows a "this session isn't open"
+state — neither creates a participant. A failed join surfaces inline rather than
+silently appearing to succeed, and leaves no partial participant row.
+
+Behind the scenes the `participants` permission rules are now **owner-scoped**
+(closing a former fail-open hole): a signed-in user can only create/update/delete
+a participant row they own, or the owning teacher can (checked against a
+forgery-proof parent-session link). The join e2e suite is
+`e2e/join-via-link.spec.ts` (multi-context late-joiner + failure legs; skips
+loudly when admin env is unset).
 
 ### Known limitations
 
@@ -190,6 +214,19 @@ this cycle ships the join-enablement gate, not the join itself.)
   one that is not legal for the current status is intentionally rejected by the
   transition guard with an inline error (it is how the failure path is observed),
   rather than being hidden.
+- The **student join** dual-write, live late-joiner sync, and the owner-scoped
+  `participants` rule backstop are exercised end-to-end only by
+  `e2e/join-via-link.spec.ts`, which skips (loudly, but green) when
+  `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure join core
+  (`buildParticipantJoin`, `shouldCreateParticipant`, `joinSession`) is fully
+  unit-covered, but the live `writeEvent` join and the data-layer rule have no
+  runnable gate until admin env is provisioned.
+- Join **idempotency** rests on a live-query precheck plus an `inFlight` latch
+  (the same posture as first-sign-in `users`-row creation), so a narrow
+  double-submit race could in principle create two participant rows before the
+  precheck observes the first; this is accepted for the MVP. `ParticipantLeft` /
+  presence-heartbeat / `lastSeenAt` updates are out of scope, so the presence set
+  only grows for now.
 - The generated **join code** carries a slight modulo bias: `generateJoinCode`
   reduces each random byte mod the 31-char alphabet (`256 % 31 = 8`), so indices
   0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the

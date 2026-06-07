@@ -1,5 +1,37 @@
 # Release Notes
 
+## Cycle 0007 — Student joins via link and becomes a participant
+
+- **New: students can now join a live session via its link and land in the
+  session view.** A student opens a teacher-shared join link (`/join/<joinCode>`),
+  signs in with a magic code if needed (returning to the link), and — on a `live`
+  session — is added as a participant and routed to the student session view
+  (`/s/<joinCode>`). A student who joins *late* immediately sees the session's
+  current shared state (its live status and the set of present participants), with
+  no manual refresh — proving real-time late-joiner sync. (`src/lib/sessions.ts`,
+  `src/components/JoinSession.tsx`, `src/components/StudentSession.tsx`,
+  `src/pages/join/[joinCode].astro`, `src/pages/s/[joinCode].astro`)
+- **One sanctioned join path, idempotent per (user, session).** Joining routes
+  exclusively through `joinSession` → `writeEvent('ParticipantJoined', …)`,
+  committing the event and the `participants` row in one transaction; reloading or
+  re-opening the link never creates a second participant row. The display name is
+  the email **local-part only** — participant rows carry **no email** by design.
+- **Clear failure states.** An unknown link shows a non-blank "session not found"
+  state and a non-live (draft/ended) session shows a "this session isn't open"
+  state — neither creates a participant.
+- **Security: the `participants` permission rules are now owner-scoped**, closing
+  the former fail-open hole before any participant rows exist — a signed-in user
+  can no longer create/update/delete a participant row they don't own (own row, or
+  the owning teacher via a forgery-proof parent-session link).
+- **Reused testids for downstream cycles:** `join-root`, `join-loading`,
+  `join-not-found`, `join-not-open`, `join-error`, `student-session-root`,
+  `student-session-status`, `student-session-presence`,
+  `student-session-presence-item`.
+- New unit coverage in `src/lib/sessions.test.ts` / `src/lib/perms.test.ts` and a
+  new e2e suite `e2e/join-via-link.spec.ts` (multi-context late-joiner + failure
+  legs; reuses `queryAdmin`, skips loudly when admin env is unset). Schema gains a
+  `participantSession` link; no new env/config keys.
+
 ## Cycle 0006 — Teacher starts / ends a session (lifecycle)
 
 - **New: run a session through its lifecycle.** From a session's detail page

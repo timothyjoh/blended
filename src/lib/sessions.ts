@@ -293,3 +293,134 @@ export async function endSession(
 export function isJoinEnabled(session: { status?: string } | null | undefined): boolean {
   return !!session && session.status === 'live'
 }
+
+// ---------------------------------------------------------------------------
+// Student join (cycle 0007). The SOLE sanctioned participant-create path,
+// following the same pure-core/thin-wrapper split as create/lifecycle above:
+// `buildParticipantJoin` totally validates and produces the projection record +
+// `ParticipantJoined` envelope BEFORE any write; `joinSession` routes the
+// dual-write through `writeEvent('ParticipantJoined', …)`. Unlike create/start,
+// `joinSession` MUST be idempotent per (user, session): the caller pre-checks an
+// existing-row count via `shouldCreateParticipant` (mirroring `shouldCreateUserRow`)
+// so a reload never writes a second row. Email is NEVER part of the record —
+// privacy is structural (the field does not exist on the entity, see db.ts); the
+// display name is the email local-part only (SPEC §12.3).
+// ---------------------------------------------------------------------------
+
+/** The `participants` projection row this cycle writes — always a `student`. */
+export type ParticipantRecord = {
+  id: string
+  sessionId: string
+  userId: string
+  role: 'student'
+  username: string
+  joinedAt: number
+  lastSeenAt: number
+  chatStatus: 'allowed'
+}
+
+export type BuildParticipantJoinInput = {
+  sessionId: string | null | undefined
+  userId: string | null | undefined
+  username: string | null | undefined
+  // Injectable for deterministic tests; production uses the defaults.
+  participantId?: string
+  now?: number
+}
+
+export type ParticipantJoinPlan = { record: ParticipantRecord; meta: WriteEventMeta }
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A missing
+ * `sessionId`, a missing `userId` (signed-out), or a blank/whitespace derived
+ * `username` is rejected, so nothing is ever written for an invalid join. The
+ * `participantId === record.id === meta.payload.participantId`, so the event folds
+ * cleanly through `applyEvent`'s `ParticipantJoined` case (log/projection
+ * consistency). The record carries NO `email` key — privacy is structural.
+ */
+export function buildParticipantJoin(input: BuildParticipantJoinInput): ParticipantJoinPlan {
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('joinSession: a sessionId is required')
+  const userId = input.userId
+  if (!userId) throw new Error('joinSession: must be signed in to join a session')
+  const username = (input.username ?? '').trim()
+  if (username === '') throw new Error('joinSession: a username is required')
+
+  const participantId = input.participantId ?? id()
+  const at = input.now ?? Date.now()
+  const record: ParticipantRecord = {
+    id: participantId,
+    sessionId,
+    userId,
+    role: 'student',
+    username,
+    joinedAt: at,
+    lastSeenAt: at,
+    chatStatus: 'allowed',
+  }
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: userId, role: 'student' },
+    payload: { participantId, userId, role: 'student', username },
+  }
+  return { record, meta }
+}
+
+/**
+ * Pure idempotency gate, mirroring `shouldCreateUserRow`. Returns true ONLY when
+ * an auth id exists, the `participants` query has loaded, no row exists yet for
+ * (user, session), and no creation write is already in flight — safe across
+ * reloads and React re-renders. The caller uses this to decide create-vs-no-op
+ * before any write, which is the idempotency-per-(user, session) guarantee.
+ */
+export function shouldCreateParticipant(input: {
+  authUserId: string | null | undefined
+  participantsLoaded: boolean
+  existingCount: number
+  inFlight: boolean
+}): boolean {
+  const { authUserId, participantsLoaded, existingCount, inFlight } = input
+  return Boolean(authUserId) && participantsLoaded && existingCount === 0 && !inFlight
+}
+
+export type JoinSessionDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (record: ParticipantRecord) => ProjectionTxn
+}
+
+const defaultParticipantTxn = (r: ParticipantRecord): ProjectionTxn =>
+  db.tx.participants[r.id]
+    .update({
+      sessionId: r.sessionId,
+      userId: r.userId,
+      role: r.role,
+      username: r.username,
+      joinedAt: r.joinedAt,
+      lastSeenAt: r.lastSeenAt,
+      chatStatus: r.chatStatus,
+    })
+    // Set the forgery-proof ownership link the tightened `participants` rule
+    // traverses (`data.ref('session.teacherId')`), exactly like sessionResources.
+    .link({ session: r.sessionId })
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing),
+ * then dual-writes the `ParticipantJoined` envelope + `participants` projection
+ * (including the `session` link) in ONE `writeEvent` transaction. Because the
+ * append and projection share that transaction, a rejected join leaves no partial
+ * participant row. Idempotency per (user, session) is enforced by the CALLER's
+ * precheck (`shouldCreateParticipant` over the live `participants` count) — this
+ * wrapper assumes the row is absent. The rejection propagates to the caller and is
+ * never swallowed. `deps` are injectable so the paths are unit-testable without a
+ * network.
+ */
+export async function joinSession(
+  input: BuildParticipantJoinInput,
+  deps: JoinSessionDeps = {}
+): Promise<ParticipantRecord> {
+  const plan = buildParticipantJoin(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultParticipantTxn
+  await write('ParticipantJoined', plan.meta, [buildTxn(plan.record)])
+  return plan.record
+}

@@ -11,7 +11,11 @@ import {
   startSession,
   endSession,
   isJoinEnabled,
+  buildParticipantJoin,
+  shouldCreateParticipant,
+  joinSession,
 } from './sessions'
+import { deriveUsername } from './auth'
 
 describe('generateJoinCode', () => {
   it('returns a code of the pinned length', () => {
@@ -309,5 +313,150 @@ describe('isJoinEnabled (join gate)', () => {
 
   it.each([null, undefined, {}])('is false for null/absent/unknown session %p', (session) => {
     expect(isJoinEnabled(session as never)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Student join (cycle 0007).
+// ---------------------------------------------------------------------------
+
+describe('buildParticipantJoin', () => {
+  const ok = { sessionId: 's1', userId: 'u1', username: 'ada', participantId: 'p1', now: 100 }
+
+  it('builds a student participant record with pinned join values', () => {
+    const { record } = buildParticipantJoin(ok)
+    expect(record).toEqual({
+      id: 'p1',
+      sessionId: 's1',
+      userId: 'u1',
+      role: 'student',
+      username: 'ada',
+      joinedAt: 100,
+      lastSeenAt: 100,
+      chatStatus: 'allowed',
+    })
+  })
+
+  it('builds a ParticipantJoined envelope with a student actor and sessionId set', () => {
+    const { meta } = buildParticipantJoin(ok)
+    expect(meta.actor).toEqual({ id: 'u1', role: 'student' })
+    expect(meta.sessionId).toBe('s1')
+    expect(meta.payload).toEqual({
+      participantId: 'p1',
+      userId: 'u1',
+      role: 'student',
+      username: 'ada',
+    })
+  })
+
+  it('keeps participantId === record.id === payload.participantId (folds cleanly)', () => {
+    const { record, meta } = buildParticipantJoin(ok)
+    expect(record.id).toBe('p1')
+    expect((meta.payload as { participantId: string }).participantId).toBe(record.id)
+  })
+
+  it('the produced record carries NO email key (structural privacy)', () => {
+    const { record } = buildParticipantJoin(ok)
+    expect(Object.keys(record)).not.toContain('email')
+    expect(JSON.stringify(record).toLowerCase()).not.toContain('email')
+  })
+
+  it('trims the username and defaults participantId/now when not injected', () => {
+    const { record, meta } = buildParticipantJoin({
+      sessionId: 's2',
+      userId: 'u2',
+      username: '  bob  ',
+    })
+    expect(record.username).toBe('bob')
+    expect(record.id).toBeTruthy()
+    expect(record.id).toBe((meta.payload as { participantId: string }).participantId)
+    expect(record.joinedAt).toBe(record.lastSeenAt)
+    expect(typeof record.joinedAt).toBe('number')
+  })
+
+  // Failure path: missing sessionId rejected BEFORE any plan is built.
+  it.each([null, undefined, ''])('rejects a missing sessionId %p', (bad) => {
+    expect(() => buildParticipantJoin({ ...ok, sessionId: bad })).toThrow(/sessionId is required/)
+  })
+
+  // Failure path: a missing userId (signed-out) is rejected.
+  it.each([null, undefined, ''])('rejects a missing userId %p', (bad) => {
+    expect(() => buildParticipantJoin({ ...ok, userId: bad })).toThrow(/signed in/)
+  })
+
+  // Failure path: a blank/whitespace derived username is rejected.
+  it.each([null, undefined, '', '   ', '\t\n'])('rejects a blank username %p', (bad) => {
+    expect(() => buildParticipantJoin({ ...ok, username: bad as never })).toThrow(
+      /username is required/
+    )
+  })
+
+  it('derives the username from the email local-part for a multi-dot/symbol address', () => {
+    // SPEC §12.3 — the join username is the email local-part. A dotted/+tagged
+    // local-part is preserved verbatim.
+    const username = deriveUsername('a.b+tag@x.io')
+    expect(username).toBe('a.b+tag')
+    const { record } = buildParticipantJoin({ sessionId: 's1', userId: 'u1', username })
+    expect(record.username).toBe('a.b+tag')
+  })
+})
+
+describe('shouldCreateParticipant (idempotency gate)', () => {
+  const base = { authUserId: 'u1', participantsLoaded: true, existingCount: 0, inFlight: false }
+
+  it('is true only when authed + loaded + no row + not in flight', () => {
+    expect(shouldCreateParticipant(base)).toBe(true)
+  })
+
+  it.each([
+    ['no auth id', { authUserId: null }],
+    ['not loaded', { participantsLoaded: false }],
+    ['a row already exists', { existingCount: 1 }],
+    ['a create is in flight', { inFlight: true }],
+  ] as const)('is false when %s', (_label, override) => {
+    expect(shouldCreateParticipant({ ...base, ...override })).toBe(false)
+  })
+})
+
+describe('joinSession wrapper', () => {
+  const ok = { sessionId: 's1', userId: 'u1', username: 'ada' }
+
+  it('calls write once with ParticipantJoined and one projection txn', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    const rec = await joinSession(ok, { write: write as never, buildTxn: () => ({}) as never })
+    expect(rec.role).toBe('student')
+    expect(rec.username).toBe('ada')
+    expect(calls).toHaveLength(1)
+    expect(calls[0][0]).toBe('ParticipantJoined')
+    expect((calls[0][1] as { sessionId: string }).sessionId).toBe('s1')
+    expect(calls[0][2]).toHaveLength(1)
+  })
+
+  // Failure path: a rejected write propagates — it is not swallowed.
+  it('propagates (does not swallow) a rejected write', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      joinSession(ok, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+
+  // Failure path: invalid input throws before write is ever called.
+  it('rejects synchronously on invalid input without calling write', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      joinSession(
+        { sessionId: '', userId: 'u1', username: 'ada' },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/sessionId is required/)
+    expect(called).toBe(false)
   })
 })

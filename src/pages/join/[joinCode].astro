@@ -1,0 +1,22 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import RouteGuard from '@/components/RouteGuard'
+import JoinSession from '@/components/JoinSession'
+
+// Student join entry (cycle 0007). Mounts the `JoinSession` island inside the
+// shared `RouteGuard`, so an unauthenticated visitor bounces to
+// `/login?next=/join/<code>` and returns here after the magic-code flow. Astro
+// already has the route param; pass it straight to the `client:only` island.
+// Astro types route params as possibly-undefined; the `[joinCode]` segment is
+// always present at runtime, but default to '' so the island prop is a definite
+// string (an empty code resolves to the island's not-found state).
+const { joinCode = '' } = Astro.params
+---
+
+<Layout title="Join session — Blended">
+  <div class="mx-auto mt-12 w-full max-w-2xl px-4">
+    <RouteGuard client:only="react">
+      <JoinSession client:only="react" joinCode={joinCode} />
+    </RouteGuard>
+  </div>
+</Layout>

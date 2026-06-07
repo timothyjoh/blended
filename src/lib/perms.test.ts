@@ -52,13 +52,24 @@ describe('permission rules (structural guard)', () => {
     expect(rules.sessionEvents.allow.delete).toBe('false')
   })
 
-  it('participants: no email semantics, writes require auth', () => {
+  it('participants: owner-scoped writes (own row or owning teacher), no email, reads open', () => {
     // The participant rule block carries no field-level email rule (privacy is
     // structural — the field is removed from the entity, not masked by a rule).
     expect(JSON.stringify(rules.participants).toLowerCase()).not.toContain('email')
-    expect(rules.participants.allow.create).toBe('auth.id != null')
-    expect(rules.participants.allow.update).toBe('auth.id != null')
-    expect(rules.participants.allow.delete).toBe('auth.id != null')
+    // Reads stay open so presence/roster is visible.
+    expect(rules.participants.allow.view).toBe('true')
+    for (const op of ['create', 'update', 'delete'] as const) {
+      const expr = rules.participants.allow[op]
+      // Regression guards: no longer fail-open, no longer the old `auth.id != null`.
+      expect(expr).not.toBe('true')
+      expect(expr).not.toBe('auth.id != null')
+      expect(expr).toContain('isOwnRow')
+    }
+    // Own-row self-join admitted via `auth.id == data.userId`; teacher ownership is
+    // checked against the LINKED parent session (forgery-proof), not a field.
+    expect(rules.participants.bind).toContain('auth.id == data.userId')
+    expect(rules.participants.bind).toContain("auth.id in data.ref('session.teacherId')")
+    expect(rules.participants.bind).toContain('isAdmin')
   })
 
   it('$default stays open so todos and Batch-2 namespaces keep today behavior', () => {
