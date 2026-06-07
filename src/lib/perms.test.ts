@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import rules from './perms'
 import rootRules from '../../instant.perms'
+import { schema } from './db'
 
 // Structural guard: locks the SECURITY-critical semantics of the permission
 // rules so no future edit silently loosens an invariant. The rules themselves
@@ -72,8 +73,26 @@ describe('permission rules (structural guard)', () => {
     expect(rules.participants.bind).toContain('isAdmin')
   })
 
-  it('$default stays open so todos and Batch-2 namespaces keep today behavior', () => {
-    expect(rules.$default.allow.$default).toBe('true')
+  it('$default denies by default — no entity falls back to world-open', () => {
+    expect(rules.$default.allow.$default).toBe('false')
+    expect(rules.$default.allow.$default).not.toBe('true')
+  })
+
+  it('every schema entity has an explicit rule (no silent fall-through)', () => {
+    // Schema-driven so a FUTURE entity added without a permission rule surfaces
+    // here as a concrete failing expectation, never a silent world-open default.
+    for (const name of Object.keys(schema.entities)) {
+      expect(
+        rules,
+        `schema entity "${name}" must have an explicit permission rule`
+      ).toHaveProperty(name)
+    }
+  })
+
+  it('formerly-default-governed entities are explicitly open (intent visible, not inherited)', () => {
+    for (const name of ['todos', 'messages', 'questions', 'endorsements'] as const) {
+      expect(rules[name].allow.$default).toBe('true')
+    }
   })
 
   it('root instant.perms.ts re-exports the single source unchanged', () => {

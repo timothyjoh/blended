@@ -1,0 +1,10 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "e2e/permissions.spec.ts",
+    "src/components/PermsProbe.tsx",
+    "src/lib/perms.test.ts",
+    "src/lib/perms.ts"
+  ]
+}

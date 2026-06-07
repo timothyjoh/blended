@@ -129,6 +129,23 @@ export default function PermsProbe() {
     }
   }
 
+  // Deny-by-default proof (cycle 0013): a raw write to an UNDECLARED namespace.
+  // Under the global `$default: 'false'` rule the live app rejects it — the
+  // promise rejects and we render the permission error (never swallowed). This
+  // demonstrates the "next entity is locked by default" guarantee.
+  function writeUndeclared() {
+    setWriteResult('…')
+    try {
+      db.transact(
+        (db.tx as Record<string, any>).forbiddenProbe[id()].update({ note: 'probe-' + Date.now() })
+      )
+        .then(() => setWriteResult('ok'))
+        .catch((err: unknown) => surface(setWriteResult, err))
+    } catch (err) {
+      surface(setWriteResult, err)
+    }
+  }
+
   // Authorized write: create a session the SIGNED-IN user owns, via the dual-write
   // choke point. Proves owner-create is allowed (and seeds a session the spec
   // then mutates to assert realtime propagation).
@@ -189,6 +206,9 @@ export default function PermsProbe() {
         </button>
         <button data-testid="probe-read-email" onClick={readEmail} className="btn">
           Read target email (raw)
+        </button>
+        <button data-testid="probe-write-undeclared" onClick={writeUndeclared} className="btn">
+          Write undeclared entity (raw)
         </button>
       </div>
       <p>

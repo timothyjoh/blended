@@ -17,13 +17,24 @@
 // fight the type system to read `rules.users.allow.view`. Keeping the literal
 // inferred type gives the guard precise, non-optional access. `astro check`
 // confirms the object is well-formed; the structural test locks the semantics.
+//
+// DENY BY DEFAULT (cycle 0013): the global `$default` below denies every op, so
+// any entity WITHOUT an explicit block — including any FUTURE schema entity and
+// any undeclared namespace — is non-readable and non-writable by a client.
+// Openness is now an explicit, reviewable decision per entity, never silent
+// inheritance. Every new schema entity MUST ship with its own explicit rule
+// (the structural guard fails loudly otherwise). Intentionally-open namespaces:
+// `todos` (demo) and the Batch-2 namespaces `messages`/`questions`/
+// `endorsements`, whose real read/write policy remains a deferred follow-up.
 // ---------------------------------------------------------------------------
 const rules = {
-  // Permissive default preserves today's behavior for `todos` (demo, must stay
-  // open) and the Batch-2 namespaces (`messages`/`questions`/`endorsements`),
-  // whose real read-visibility policy is explicitly out of scope this cycle.
-  // Tightening this default is a documented Batch-2 follow-up.
-  $default: { allow: { $default: 'true' } },
+  // Deny-by-default: any entity WITHOUT an explicit block below — including any
+  // future schema entity and any undeclared namespace — is non-readable and
+  // non-writable by a client. Openness must now be an explicit, reviewable
+  // decision per entity (below), never silent inheritance. Intentionally-open
+  // namespaces: `todos` (demo), and the Batch-2 namespaces `messages` /
+  // `questions` / `endorsements`, whose real read/write policy is deferred.
+  $default: { allow: { $default: 'false' } },
 
   users: {
     // Row-level: a user can only ever see/create/update their OWN row, so no
@@ -112,6 +123,18 @@ const rules = {
       delete: 'isOwnRow || isSessionOwner || isAdmin',
     },
   },
+
+  // Intentionally OPEN demo namespace (no typed schema entity; explicit so the
+  // openness is reviewable, not inherited from the global default).
+  todos: { allow: { $default: 'true' } },
+
+  // Batch-2 namespaces — kept at today's fully-open behavior EXPLICITLY so no
+  // product flow (student chat, question promotion/queue, endorsements) regresses.
+  // The real participant/owner-scoped read+write policy is a deferred Batch-2
+  // follow-up (the `messageSession`/`question*` links already exist to enable it).
+  messages: { allow: { $default: 'true' } },
+  questions: { allow: { $default: 'true' } },
+  endorsements: { allow: { $default: 'true' } },
 }
 
 export default rules

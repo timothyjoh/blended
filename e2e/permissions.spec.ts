@@ -107,6 +107,24 @@ test.describe('data-layer permission rules', () => {
     await studentCtx.close()
   })
 
+  test('deny-by-default: a signed-in client cannot write an undeclared/default-governed entity', async ({
+    browser,
+  }) => {
+    // The global `$default: 'false'` rule (cycle 0013) locks every namespace
+    // without an explicit block. A signed-in user's raw write to an UNDECLARED
+    // entity is rejected by the live app — proving the "next entity is locked by
+    // default" guarantee, with no row persisted.
+    const ctx = await browser.newContext()
+    const page = await ctx.newPage()
+    await signInViaUi(page, freshEmail())
+    await gotoProbe(page, { targetSessionId: freshSessionId() })
+    await page.getByTestId('probe-write-undeclared').click()
+    await expect(page.getByTestId('probe-write-result')).toContainText('error:', {
+      timeout: 20_000,
+    })
+    await ctx.close()
+  })
+
   test('email privacy: a student cannot read another user email', async ({ browser }) => {
     const sessionId = freshSessionId()
 

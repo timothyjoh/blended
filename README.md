@@ -63,8 +63,13 @@ is not silent).
 Security invariants are enforced at the data layer, not just in the UI:
 private student email is readable only by its owner, and only the owning teacher
 may mutate a session's state (`sessions` / `sessionResources`), while any
-authenticated participant may append to the `sessionEvents` log. The rules live
-in `src/lib/perms.ts` (root `instant.perms.ts` is the CLI adapter). After
+authenticated participant may append to the `sessionEvents` log. The global
+`$default` rule **denies by default** (`allow: { $default: 'false' }`), so any
+entity without an explicit block — including any future schema entity — is
+non-readable and non-writable by a client; every new schema entity must therefore
+ship its own rule (a structural guard in `src/lib/perms.test.ts` fails loudly
+otherwise). The rules live in `src/lib/perms.ts` (root `instant.perms.ts` is the
+CLI adapter). After
 `push schema`, push them with **`npm run perms:push`** — a fail-loud wrapper
 around `npx instant-cli push perms` that exits non-zero with a clear message if
 the app id or `instant-cli` auth is missing, and is safe to re-run (declarative).
@@ -305,17 +310,23 @@ exist; no new `.env` keys). The e2e suite is `e2e/teacher-question-queue.spec.ts
   0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the
   code stays unguessable (~49 bits); rejection sampling would make the
   distribution provably uniform if a future cycle needs it.
-- **Chat messages still run under the permissive `$default` rule.** This is the
-  first cycle to write real `messages` rows, but the entity is not yet covered by
-  a scoped permission rule (`src/lib/perms.ts`), so every operation is open: any
+- **Chat messages now carry an explicit open permission block, but are still
+  fully open.** As of cycle 0013 the global `$default` rule **denies by default**
+  (`allow: { $default: 'false' }`, `src/lib/perms.ts`) — every entity without an
+  explicit block, including any future schema entity and any undeclared
+  namespace, is non-readable and non-writable by a client. `messages` (along with
+  `questions`, `endorsements`, and the `todos` demo) now carries its own explicit
+  `allow: { $default: 'true' }` block, so its openness is a visible, reviewable
+  decision rather than silent inheritance — but it is still *fully* open: any
   client (including unauthenticated) can read every session's chat, create a
   message spoofing another `participantId`, and edit or delete other students'
   messages. Open cross-student reads are needed for the realtime stream, but
   write/delete were never meant to stay open once rows exist. The `messageSession`
-  link was added this cycle precisely to enable a participant/owner-scoped rule;
-  it should be tightened (scope `create` to the owning participant; `update` /
-  `delete` to the row owner + owning teacher/admin; keep reads open) and pushed
-  with `npm run perms:push` before later cycles build on `messages`.
+  link exists precisely to enable a participant/owner-scoped rule; the real
+  tightening (scope `create` to the owning participant; `update` / `delete` to the
+  row owner + owning teacher/admin; keep reads open) remains the deferred Batch-2
+  follow-up, pushed with `npm run perms:push` before later cycles build on
+  `messages`.
 - A **failed teacher-queue question query renders as the empty state.** The open
   questions derive from `qq.data?.questions ?? []`, so a `questions` live-query
   error falls through to the "no open questions yet" message — logged to the
