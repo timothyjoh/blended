@@ -1,0 +1,21 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import SessionRouteGuard from '@/components/SessionRouteGuard'
+
+// Ownership-scoped protected placeholder (cycle 0004). The real session screen
+// is a future cycle — this carries only an identifying shell behind the
+// ownership guard. Astro already has the route param, so pass it straight to the
+// `client:only` island rather than re-parsing the URL client-side.
+// Astro types route params as possibly-undefined; the `[id]` segment is always
+// present at runtime, but default to '' so the island prop is a definite string
+// (an empty id resolves to the guard's denial state, never the protected shell).
+const { id = '' } = Astro.params
+---
+
+<Layout title="Session — Blended">
+  <div class="mx-auto mt-12 w-full max-w-2xl px-4">
+    <SessionRouteGuard client:only="react" sessionId={id}>
+      <h1 data-testid="session-root" class="text-2xl font-semibold">Session {id}</h1>
+    </SessionRouteGuard>
+  </div>
+</Layout>

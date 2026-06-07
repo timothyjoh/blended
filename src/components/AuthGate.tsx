@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/useAuth'
 import { isValidEmail } from '@/lib/auth'
+import { safeNextPath } from '@/lib/routing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+
+// Read the intended post-login destination from the current URL. Kept local so
+// `AuthGate` stays prop-free (mirrors `PermsProbe`'s `URLSearchParams` idiom).
+function readNext(): string | null {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get('next')
+}
 
 // ---------------------------------------------------------------------------
 // The single reusable sign-in island (SPEC §38, §42): email step → code step →
@@ -21,6 +29,19 @@ export default function AuthGate() {
   const [code, setCode] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  // One-shot latch so the post-sign-in redirect fires once, not on every
+  // re-render or StrictMode double-invoke.
+  const redirected = useRef(false)
+
+  // Intended-destination round-trip (SPEC §39): once authenticated — whether the
+  // user just verified a code or loaded `/login` already signed in — navigate to
+  // a validated `next`, else the `/dashboard` default. `safeNextPath` neutralizes
+  // any hostile/off-origin `next` so a crafted param can't drive an open redirect.
+  useEffect(() => {
+    if (!user || redirected.current || typeof window === 'undefined') return
+    redirected.current = true
+    window.location.replace(safeNextPath(readNext()))
+  }, [user])
 
   function surface(err: unknown) {
     const message = err instanceof Error ? err.message : String(err)

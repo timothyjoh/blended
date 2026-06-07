@@ -105,6 +105,25 @@ email sent). Set `INSTANT_ADMIN_TOKEN` (e2e-only; see `.env.example`) before
 `npm run test:e2e`; when it is unset the auth suite skips loudly rather than
 passing falsely.
 
+## Protected routes (route guarding)
+
+Protected destinations now require sign-in. A logged-out visitor who opens a
+protected route is bounced to **`/login`** with the destination remembered, and
+**after signing in lands back on the exact page they originally requested** —
+including a deep link such as `/dashboard/sessions/<id>`, whose id is preserved
+across the round-trip. A signed-in visitor opening `/login` with no destination
+is routed to **`/dashboard`**. Opening an ownership-scoped route you are not
+permitted to view (another teacher's session) shows a graceful "you don't have
+access" denial rather than the protected content.
+
+This cycle ships only the guard and thin placeholder shells (`/dashboard`,
+`/dashboard/sessions/[id]` carry a heading and a `data-testid` — the real
+screens are later cycles). The intended-destination round-trip is open-redirect
+safe: a crafted `?next=` pointing off-origin (`//evil`, `https://evil`, …) is
+discarded and falls back to `/dashboard`. The route-guard e2e suite
+(`e2e/route-guarding.spec.ts`) reuses `INSTANT_ADMIN_TOKEN` and skips loudly
+when it is unset.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
@@ -119,6 +138,10 @@ passing falsely.
   surfaced or logged, so a persistent query failure can leave a signed-in user
   without a `users` row. Downstream username/role reads should not assume the
   row always exists.
+- Route guarding is **client-side only** — protected pages render an SSR shell
+  that hydrates and then decides, so there is no server/middleware protection
+  and the guarded content is gated only after `useAuth` resolves in the browser.
+  Until that point the guard shows `route-guard-loading` rather than redirecting.
 
 ## Resources
 
