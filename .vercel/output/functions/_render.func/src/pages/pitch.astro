@@ -1,0 +1,613 @@
+---
+import 'reveal.js/reveal.css'
+import 'reveal.js/theme/black.css'
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blended Pitch</title>
+    <meta
+      name="description"
+      content="Blended pitch deck: an event-sourced live classroom session system for teachers and students."
+    />
+  </head>
+  <body>
+    <div class="reveal blended-pitch">
+      <img class="brand-bug" src="/assets/blendly-logo.jpeg" alt="Blendly logo" />
+      <div class="slides">
+        <section class="title-slide" data-background-gradient="linear-gradient(135deg, #05070b 0%, #07111f 45%, #172554 100%)">
+          <div class="title-grid">
+            <div>
+              <p class="eyebrow">Blendly · learn together</p>
+              <h1>Live classrooms deserve a memory.</h1>
+              <p class="lede">
+                Blended turns synchronous teaching into a replayable, AI-assisted learning timeline.
+              </p>
+              <p class="footnote">Teacher-controlled resources · Natural student participation · Event-sourced replay</p>
+            </div>
+            <div class="logo-card">
+              <img src="/assets/blendly-logo.jpeg" alt="Blendly learn together logo" />
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">The problem</p>
+          <h2>Teachers are running three rooms at once.</h2>
+          <div class="three-grid">
+            <article>
+              <strong>Presenting</strong>
+              <span>Slides, links, forms, demos, and pacing.</span>
+            </article>
+            <article>
+              <strong>Reading the room</strong>
+              <span>Who is lost? What question keeps repeating?</span>
+            </article>
+            <article>
+              <strong>Recovering the lesson</strong>
+              <span>What happened, what was answered, and who needs help next?</span>
+            </article>
+          </div>
+          <p class="callout">The live moment disappears. The learning signal does too.</p>
+        </section>
+
+        <section>
+          <p class="eyebrow">The answer</p>
+          <h2>Not chat. Not Zoom. A live learning session.</h2>
+          <p class="lede compact">
+            A teacher creates a bounded session, queues web resources, invites students, switches the active resource, and gets AI help surfacing the questions that matter.
+          </p>
+          <div class="signal-row">
+            <span>Session</span>
+            <span>Resource queue</span>
+            <span>Question triage</span>
+            <span>Cursor voting</span>
+            <span>Replay</span>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">Product spine</p>
+          <h2>The event stream is the product.</h2>
+          <pre><code data-trim>
+SessionStarted
+ResourceActivated
+ChatMessageSubmitted
+AIMessageClassified
+QuestionClusterCreated
+CursorVoteStarted
+CursorVoteSummaryCreated
+TeacherMarkedQuestionAnswered
+SessionEnded
+          </code></pre>
+          <p class="callout">Every meaningful classroom action becomes evidence the app can replay, summarize, and learn from.</p>
+        </section>
+
+        <section>
+          <p class="eyebrow">Teacher flow</p>
+          <h2>Before class: queue the lesson.</h2>
+          <ol class="steps">
+            <li>Create “Photosynthesis Review.”</li>
+            <li>Add slides, an article, and a checkpoint form.</li>
+            <li>Check embedding and fallback behavior.</li>
+            <li>Share the magic-link join URL.</li>
+          </ol>
+        </section>
+
+        <section>
+          <p class="eyebrow">Live class</p>
+          <h2>The teacher controls the active resource.</h2>
+          <div class="device-frame teacher-frame">
+            <div class="rail">
+              <b>Run of show</b>
+              <span class="active">1 · Deck</span>
+              <span>2 · Article</span>
+              <span>3 · Checkpoint</span>
+            </div>
+            <div class="stage">
+              <span>Active resource</span>
+              <h3>Light reactions split water.</h3>
+            </div>
+            <div class="rail right">
+              <b>AI triage</b>
+              <span>18 votes · “Why quarter?”</span>
+              <span>11 votes · “What is ATP?”</span>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">Student flow</p>
+          <h2>Students participate naturally.</h2>
+          <p class="lede compact">They join from a link, authenticate by email magic code, and type like humans. The system classifies the stream.</p>
+          <div class="two-col">
+            <div>
+              <h3>Students can</h3>
+              <ul>
+                <li>Scroll locally</li>
+                <li>Ask questions</li>
+                <li>Upvote anonymous clusters</li>
+                <li>Use cursor-voting prompts</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Students cannot</h3>
+              <ul>
+                <li>Take over the active URL</li>
+                <li>Rename themselves in MVP</li>
+                <li>Free-draw on the shared screen</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">AI assistant</p>
+          <h2>AI keeps teachers out of the chat swamp.</h2>
+          <div class="cards">
+            <article><b>Classify</b><span>question, response, feedback, confusion, noise</span></article>
+            <article><b>Cluster</b><span>group similar questions and rank by demand</span></article>
+            <article><b>Moderate</b><span>hide bad vibes from peers; keep an audit log</span></article>
+            <article><b>Later</b><span>match spoken answers from transcription</span></article>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">Interaction</p>
+          <h2>Cursor-voting beats freehand drawing for MVP.</h2>
+          <div class="heatmap-demo">
+            <div class="blob one"></div>
+            <div class="blob two"></div>
+            <div class="blob three"></div>
+            <h3>“Hover over the part you don’t understand.”</h3>
+            <p>Normalized positions become a lightweight confusion map.</p>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">Replay</p>
+          <h2>The session does not vanish when the bell rings.</h2>
+          <ul class="big-list">
+            <li>Resource switches reconstruct the lesson path.</li>
+            <li>Open and answered questions stay reviewable.</li>
+            <li>Cursor-vote summaries show where confusion clustered.</li>
+            <li>Future transcript segments make spoken answers searchable.</li>
+          </ul>
+        </section>
+
+        <section>
+          <p class="eyebrow">Hackathon scope</p>
+          <h2>Build the smallest convincing vertical slice.</h2>
+          <div class="timeline">
+            <span>Days 1–2<br /><b>Realtime spike</b></span>
+            <span>3–5<br /><b>Session + queue</b></span>
+            <span>6–7<br /><b>Auth + identity</b></span>
+            <span>8–11<br /><b>Questions + cursors</b></span>
+            <span>12–14<br /><b>AI + replay + polish</b></span>
+          </div>
+        </section>
+
+        <section>
+          <p class="eyebrow">Risks</p>
+          <h2>The traps are known. Good. We can avoid them.</h2>
+          <div class="two-col risks">
+            <div>
+              <h3>Embedding</h3>
+              <p>Some sites block iframes. Detect failure, show fallback, and demo known-good resources.</p>
+            </div>
+            <div>
+              <h3>Scope creep</h3>
+              <p>This is not Zoom + Miro + Canvas + Otter. Start with sessions, resources, questions, cursor voting, and replay.</p>
+            </div>
+          </div>
+        </section>
+
+        <section data-background-gradient="linear-gradient(135deg, #020617 0%, #0f172a 55%, #164e63 100%)">
+          <p class="eyebrow">North star</p>
+          <h2>A synchronous learning session where every meaningful action becomes replayable.</h2>
+          <p class="lede compact">Teacher controls the lesson. Students participate without taking over. AI keeps questions from getting lost. The class leaves behind a learning artifact.</p>
+          <p class="footnote"><a href="/mockups">View mockups</a> · <a href="https://github.com/timothyjoh/blended/blob/main/docs/SPEC.md">Read spec in repo</a></p>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      import Reveal from 'reveal.js'
+
+      const deck = new Reveal({
+        hash: true,
+        controls: true,
+        progress: true,
+        center: true,
+        transition: 'slide',
+        backgroundTransition: 'fade',
+        width: 1280,
+        height: 720,
+        margin: 0.06,
+      })
+
+      deck.initialize()
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: #020617;
+  }
+
+  .blended-pitch {
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #e5eefc;
+  }
+
+  .blended-pitch .slides section {
+    text-align: left;
+  }
+
+  .brand-bug {
+    position: fixed;
+    right: 1.1rem;
+    bottom: 1.1rem;
+    z-index: 20;
+    width: 64px;
+    height: 64px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 18px;
+    object-fit: cover;
+    object-position: center 50%;
+    opacity: 0.72;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+  }
+
+  .title-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 3rem;
+    align-items: center;
+  }
+
+  .logo-card {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 36px;
+    background: #000;
+    box-shadow: 0 30px 120px rgba(8, 145, 178, 0.22);
+  }
+
+  .logo-card img {
+    display: block;
+    width: 100%;
+    height: 360px;
+    object-fit: cover;
+    object-position: center 52%;
+  }
+
+  .blended-pitch h1,
+  .blended-pitch h2,
+  .blended-pitch h3 {
+    color: #ffffff;
+    font-family: inherit;
+    letter-spacing: -0.05em;
+    text-transform: none;
+  }
+
+  .blended-pitch h1 {
+    max-width: 980px;
+    font-size: 4.6rem;
+    line-height: 0.95;
+  }
+
+  .blended-pitch h2 {
+    max-width: 1000px;
+    font-size: 3.6rem;
+    line-height: 1;
+  }
+
+  .blended-pitch h3 {
+    margin-bottom: 0.4em;
+    font-size: 1.35rem;
+  }
+
+  .blended-pitch p,
+  .blended-pitch li,
+  .blended-pitch span {
+    color: #cbd5e1;
+  }
+
+  .blended-pitch a {
+    color: #67e8f9;
+  }
+
+  .eyebrow {
+    margin-bottom: 1rem;
+    color: #67e8f9 !important;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+  }
+
+  .lede {
+    max-width: 880px;
+    font-size: 1.55rem;
+    line-height: 1.35;
+  }
+
+  .compact {
+    max-width: 980px;
+    font-size: 1.25rem;
+  }
+
+  .footnote {
+    margin-top: 2.5rem;
+    color: #94a3b8 !important;
+    font-size: 0.9rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .three-grid,
+  .cards,
+  .two-col {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .three-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cards,
+  .two-col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .three-grid article,
+  .cards article,
+  .two-col > div,
+  .callout,
+  .device-frame,
+  .heatmap-demo,
+  .timeline span {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 28px;
+    background: rgba(15, 23, 42, 0.72);
+    box-shadow: 0 24px 80px rgba(2, 6, 23, 0.35);
+  }
+
+  .three-grid article,
+  .cards article,
+  .two-col > div {
+    padding: 1.35rem;
+  }
+
+  .three-grid strong,
+  .cards b {
+    display: block;
+    margin-bottom: 0.55rem;
+    color: white;
+    font-size: 1.2rem;
+  }
+
+  .three-grid span,
+  .cards span {
+    display: block;
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .callout {
+    margin-top: 1.4rem;
+    padding: 1.1rem 1.3rem;
+    color: #e0f2fe !important;
+    font-size: 1.1rem;
+  }
+
+  .signal-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .signal-row span {
+    border: 1px solid rgba(103, 232, 249, 0.35);
+    border-radius: 999px;
+    padding: 0.65rem 1rem;
+    background: rgba(8, 145, 178, 0.12);
+    color: #e0f2fe;
+    font-weight: 800;
+  }
+
+  .blended-pitch pre {
+    width: 100%;
+    border-radius: 28px;
+    background: #020617;
+    box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.22);
+  }
+
+  .blended-pitch code {
+    color: #a7f3d0;
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .steps,
+  .big-list {
+    margin-left: 1.3rem;
+    font-size: 1.35rem;
+    line-height: 1.65;
+  }
+
+  .device-frame {
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .rail,
+  .stage {
+    border-radius: 22px;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .rail b,
+  .rail span {
+    display: block;
+  }
+
+  .rail span {
+    margin-top: 0.75rem;
+    border-radius: 14px;
+    padding: 0.65rem;
+    background: rgba(15, 23, 42, 0.85);
+    font-size: 0.78rem;
+  }
+
+  .rail .active {
+    background: rgba(6, 182, 212, 0.28);
+    color: #e0f2fe;
+  }
+
+  .stage {
+    min-height: 250px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(124, 58, 237, 0.25));
+  }
+
+  .stage span {
+    color: #bae6fd;
+    font-size: 0.8rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .stage h3 {
+    margin-top: 4rem;
+    font-size: 2.4rem;
+  }
+
+  .two-col ul {
+    margin-left: 1.2rem;
+    font-size: 1.05rem;
+    line-height: 1.55;
+  }
+
+  .heatmap-demo {
+    position: relative;
+    min-height: 340px;
+    overflow: hidden;
+    padding: 2rem;
+    background:
+      radial-gradient(circle at 72% 42%, rgba(251, 191, 36, 0.35), transparent 22%),
+      radial-gradient(circle at 35% 62%, rgba(34, 211, 238, 0.32), transparent 24%),
+      linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.86));
+  }
+
+  .heatmap-demo h3 {
+    position: relative;
+    z-index: 2;
+    max-width: 620px;
+    font-size: 2.2rem;
+  }
+
+  .heatmap-demo p {
+    position: relative;
+    z-index: 2;
+    max-width: 560px;
+    font-size: 1.1rem;
+  }
+
+  .blob {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(2px);
+    opacity: 0.9;
+  }
+
+  .one {
+    top: 38%;
+    right: 18%;
+    width: 150px;
+    height: 150px;
+    background: rgba(251, 191, 36, 0.5);
+  }
+
+  .two {
+    top: 52%;
+    right: 31%;
+    width: 105px;
+    height: 105px;
+    background: rgba(248, 113, 113, 0.42);
+  }
+
+  .three {
+    bottom: 15%;
+    left: 30%;
+    width: 82px;
+    height: 82px;
+    background: rgba(45, 212, 191, 0.42);
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .timeline span {
+    padding: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  .timeline b {
+    color: white;
+  }
+
+  .risks p {
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 820px) {
+    .blended-pitch h1 {
+      font-size: 3.2rem;
+    }
+
+    .blended-pitch h2 {
+      font-size: 2.6rem;
+    }
+
+    .three-grid,
+    .cards,
+    .two-col,
+    .device-frame,
+    .timeline,
+    .title-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .logo-card img {
+      height: 260px;
+    }
+
+    .brand-bug {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+    }
+  }
+</style>

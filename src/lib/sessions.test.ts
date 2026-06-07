@@ -17,6 +17,7 @@ import {
   buildChatMessage,
   shouldSubmitChatMessage,
   submitChatMessage,
+  defaultChatTxn,
   buildQuestion,
   buildQuestionAnswer,
   answerQuestion,
@@ -582,6 +583,41 @@ describe('shouldSubmitChatMessage (idempotency gate)', () => {
     ['blank text', { text: '   ' }],
   ] as const)('is false when %s', (_label, override) => {
     expect(shouldSubmitChatMessage({ ...base, ...override })).toBe(false)
+  })
+})
+
+describe('defaultChatTxn (real projection txn, cycle 0014)', () => {
+  // The submitChatMessage wrapper tests stub `buildTxn`, so they never exercise
+  // the real txn body. This test invokes the real builder and pins that it sets
+  // BOTH the parent-session link and the author-participant link — the latter is
+  // what the tightened `messages` create rule traverses to verify the author.
+  const record = {
+    id: 'm1',
+    sessionId: 's1',
+    participantId: 'p1',
+    clientActionId: 'ca1',
+    text: 'hello class',
+    visibility: 'class',
+    classificationStatus: 'chat',
+    createdAt: 5000,
+  }
+
+  it('sets both the session and participant links from the record', () => {
+    const txn = defaultChatTxn(record as never) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const linkOp = txn.__ops.find((op) => op[0] === 'link')
+    expect(linkOp, 'defaultChatTxn must emit a link op').toBeDefined()
+    expect(linkOp![3]).toEqual({ session: 's1', participant: 'p1' })
+  })
+
+  it('keys the row on the message id (deterministic upsert)', () => {
+    const txn = defaultChatTxn(record as never) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const updateOp = txn.__ops.find((op) => op[0] === 'update')
+    expect(updateOp![2]).toBe('m1')
+    expect(updateOp![3]).toMatchObject({ sessionId: 's1', participantId: 'p1' })
   })
 })
 

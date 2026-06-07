@@ -24,16 +24,19 @@
 // Openness is now an explicit, reviewable decision per entity, never silent
 // inheritance. Every new schema entity MUST ship with its own explicit rule
 // (the structural guard fails loudly otherwise). Intentionally-open namespaces:
-// `todos` (demo) and the Batch-2 namespaces `messages`/`questions`/
-// `endorsements`, whose real read/write policy remains a deferred follow-up.
+// `todos` (demo) and the Batch-2 namespaces `questions`/`endorsements`, whose
+// real read/write policy remains a deferred follow-up. `messages` was tightened
+// in cycle 0014 (participant-scoped create + row-owner/owning-teacher
+// update/delete; reads stay open for the live stream).
 // ---------------------------------------------------------------------------
 const rules = {
   // Deny-by-default: any entity WITHOUT an explicit block below — including any
   // future schema entity and any undeclared namespace — is non-readable and
   // non-writable by a client. Openness must now be an explicit, reviewable
   // decision per entity (below), never silent inheritance. Intentionally-open
-  // namespaces: `todos` (demo), and the Batch-2 namespaces `messages` /
-  // `questions` / `endorsements`, whose real read/write policy is deferred.
+  // namespaces: `todos` (demo), and the Batch-2 namespaces `questions` /
+  // `endorsements`, whose real read/write policy is deferred (`messages` was
+  // tightened in cycle 0014).
   $default: { allow: { $default: 'false' } },
 
   users: {
@@ -128,11 +131,40 @@ const rules = {
   // openness is reviewable, not inherited from the global default).
   todos: { allow: { $default: 'true' } },
 
-  // Batch-2 namespaces — kept at today's fully-open behavior EXPLICITLY so no
-  // product flow (student chat, question promotion/queue, endorsements) regresses.
-  // The real participant/owner-scoped read+write policy is a deferred Batch-2
-  // follow-up (the `messageSession`/`question*` links already exist to enable it).
-  messages: { allow: { $default: 'true' } },
+  // Cycle 0014: `messages` is no longer fail-open. CREATE is participant-scoped
+  // AND anti-spoof — the author must own the LINKED participant
+  // (`auth.id in data.ref('participant.userId')`, forgery-proof via the
+  // `messageParticipant` link, db.ts) AND the stored `participantId` scalar must
+  // equal that linked participant's id
+  // (`data.participantId in data.ref('participant.id')`), so a client cannot
+  // attribute a message to a participant it does not own, whether by setting a
+  // foreign scalar or by decoupling the scalar from the link. UPDATE/DELETE are
+  // restricted to the authoring participant, the owning teacher (checked against
+  // the LINKED session's `teacherId`, never a client field), or the reserved
+  // `isAdmin` slot (false today; the admin SDK bypasses rules). Mirrors the
+  // `participants` row-owner + owning-teacher pattern.
+  messages: {
+    bind: [
+      'isAuthor', "auth.id in data.ref('participant.userId')",
+      'scalarMatchesLink', "data.participantId in data.ref('participant.id')",
+      'isOwningTeacher', "auth.id in data.ref('session.teacherId')",
+      'isAdmin', 'false',
+    ],
+    allow: {
+      // READ stays OPEN by design — the live cross-student chat stream depends on
+      // every client reading every session's messages. This is intentional, not
+      // an oversight; tightening reads would break the realtime stream.
+      view: 'true',
+      create: 'isAuthor && scalarMatchesLink',
+      update: 'isAuthor || isOwningTeacher || isAdmin',
+      delete: 'isAuthor || isOwningTeacher || isAdmin',
+    },
+  },
+
+  // Batch-2 namespaces still fully-open EXPLICITLY so no product flow (question
+  // promotion/queue, endorsements) regresses. `messages` has since been tightened
+  // (above); `questions`/`endorsements` remain the deferred Batch-2 follow-ups
+  // (the `question*` links already exist to enable a future owner-scoped rule).
   questions: { allow: { $default: 'true' } },
   endorsements: { allow: { $default: 'true' } },
 }

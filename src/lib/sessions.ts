@@ -604,7 +604,7 @@ export type SubmitChatMessageDeps = {
   buildQuestionTxn?: (record: QuestionRecord) => ProjectionTxn
 }
 
-const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
+export const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
   db.tx.messages[r.id]
     .update({
       sessionId: r.sessionId,
@@ -615,9 +615,11 @@ const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
       classificationStatus: r.classificationStatus,
       createdAt: r.createdAt,
     })
-    // Set the parent-session link (mirroring the participant join) so the session
-    // can enumerate its messages and a future tightened rule can traverse it.
-    .link({ session: r.sessionId })
+    // Set the parent-session link AND the author-participant link so the session
+    // can enumerate its messages, and the tightened create rule can verify the
+    // author owns the linked participant (forgery-proof) rather than trusting the
+    // client-supplied `participantId` scalar (cycle 0014).
+    .link({ session: r.sessionId, participant: r.participantId })
 
 /**
  * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then

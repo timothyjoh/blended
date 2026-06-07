@@ -6,6 +6,7 @@ import {
   emptyProjection,
   compareEvents,
   writeEvent,
+  schema,
   UnknownEventTypeError,
   type EventLike,
   type ProjectionTxn,
@@ -30,6 +31,17 @@ describe('requireAppId', () => {
 
   it('throws on undefined', () => {
     expect(() => requireAppId(undefined)).toThrow(/PUBLIC_INSTANTDB_APP_ID is missing or empty/)
+  })
+})
+
+describe('schema links', () => {
+  it('messageParticipant links a message to its author participant (cycle 0014)', () => {
+    // The tightened `messages` rule traverses this link for the forgery-proof
+    // author check; pin its endpoints/labels so a future schema edit can't break
+    // the rule silently.
+    const link = schema.links.messageParticipant
+    expect(link.forward).toEqual({ on: 'messages', has: 'one', label: 'participant' })
+    expect(link.reverse).toEqual({ on: 'participants', has: 'many', label: 'messages' })
   })
 })
 

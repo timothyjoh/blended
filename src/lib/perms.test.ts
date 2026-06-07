@@ -89,8 +89,42 @@ describe('permission rules (structural guard)', () => {
     }
   })
 
+  it('messages: participant-scoped create + row-owner/owning-teacher update/delete, reads open (cycle 0014)', () => {
+    // No longer fail-open: the key is gone, there is an explicit block.
+    expect(rules.messages.allow).not.toHaveProperty('$default')
+    // READ stays open by design so the live cross-student stream renders.
+    expect(rules.messages.allow.view).toBe('true')
+    // CREATE is participant-scoped AND anti-spoof, never bare `auth.id != null`.
+    expect(rules.messages.allow.create).not.toBe('true')
+    expect(rules.messages.allow.create).not.toBe('auth.id != null')
+    expect(rules.messages.allow.create).toContain('isAuthor')
+    expect(rules.messages.allow.create).toContain('scalarMatchesLink')
+    // UPDATE/DELETE = author, owning teacher, or reserved admin slot — not open.
+    for (const op of ['update', 'delete'] as const) {
+      const expr = rules.messages.allow[op]
+      expect(expr).not.toBe('true')
+      expect(expr).toContain('isAuthor')
+      expect(expr).toContain('isOwningTeacher')
+      expect(expr).toContain('isAdmin')
+    }
+    // The author and anti-spoof checks traverse the LINKED participant, and the
+    // owning-teacher check the LINKED session — all forgery-proof, never a
+    // client-supplied scalar.
+    expect(rules.messages.bind).toContain("auth.id in data.ref('participant.userId')")
+    expect(rules.messages.bind).toContain("data.participantId in data.ref('participant.id')")
+    expect(rules.messages.bind).toContain("auth.id in data.ref('session.teacherId')")
+    expect(rules.messages.bind).toContain('isAdmin')
+    expect(rules.messages.bind).toContain('false')
+    // Regression / anti-forgery: no write op may trust a client-supplied scalar
+    // (`data.teacherId` / `data.userId`) in place of the link traversal.
+    for (const op of ['create', 'update', 'delete'] as const) {
+      expect(rules.messages.allow[op]).not.toContain('data.teacherId')
+      expect(rules.messages.allow[op]).not.toContain('data.userId')
+    }
+  })
+
   it('formerly-default-governed entities are explicitly open (intent visible, not inherited)', () => {
-    for (const name of ['todos', 'messages', 'questions', 'endorsements'] as const) {
+    for (const name of ['todos', 'questions', 'endorsements'] as const) {
       expect(rules[name].allow.$default).toBe('true')
     }
   })

@@ -1,0 +1,13 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "release-notes.md",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/perms.test.ts",
+    "src/lib/perms.ts",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts"
+  ]
+}

@@ -176,6 +176,17 @@ export const schema = i.schema({
       forward: { on: 'questions', has: 'one', label: 'participant' },
       reverse: { on: 'participants', has: 'many', label: 'questions' },
     },
+    // Cycle 0014: link each `messages` row to its AUTHOR participant (mirroring
+    // `questionParticipant`) so the tightened `messages` rule can traverse the
+    // REAL author — `data.ref('participant.userId')` for the author check and
+    // `data.ref('participant.id')` for the anti-spoof scalar↔link coupling —
+    // instead of trusting the client-supplied `participantId` scalar. The chat
+    // submit sets the forward `participant` link; the reverse `messages` label
+    // lets a participant enumerate its authored messages.
+    messageParticipant: {
+      forward: { on: 'messages', has: 'one', label: 'participant' },
+      reverse: { on: 'participants', has: 'many', label: 'messages' },
+    },
     questionSession: {
       forward: { on: 'questions', has: 'one', label: 'session' },
       reverse: { on: 'sessions', has: 'many', label: 'questions' },

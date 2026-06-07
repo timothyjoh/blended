@@ -1,5 +1,27 @@
 # Release Notes
 
+## Cycle 0014 — Chat messages: author-scoped writes, spoof-proof identity
+
+- **A student's chat messages can no longer be edited, deleted, or impersonated
+  by another student or an unauthenticated client.** Until now the `messages`
+  entity was governed by a fully-open permission rule — every operation was
+  permitted for everyone. This cycle replaces it with an explicit, forgery-proof
+  rule enforced at the data layer (not just hidden in the UI): you can only post
+  a message under your own identity, and only the message's author or the
+  session's owning teacher can subsequently edit or delete it. An attempt by
+  anyone else — including a hand-crafted client — is rejected by InstantDB.
+- **Live cross-student chat is unchanged.** Reads stay open by design, so every
+  joined student still sees the whole class's messages stream in live; a denied
+  write degrades to "message not posted/changed" and never breaks the stream for
+  others.
+- **Under the hood:** a new `messageParticipant` link makes each message's author
+  traversable so the rule verifies ownership against the real linked participant
+  (and that the stored `participantId` matches it) rather than trusting a
+  client-supplied field. Deploying the change is an additive
+  `npx instant-cli push schema` (the link) followed by `npm run perms:push` (the
+  tightened rules). `questions` and `endorsements` remain the open namespaces,
+  pending their own follow-ups.
+
 ## Cycle 0010 — Teacher question queue + mark answered
 
 - **New: teachers can now see student questions live and mark them answered.**

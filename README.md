@@ -310,23 +310,24 @@ exist; no new `.env` keys). The e2e suite is `e2e/teacher-question-queue.spec.ts
   0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the
   code stays unguessable (~49 bits); rejection sampling would make the
   distribution provably uniform if a future cycle needs it.
-- **Chat messages now carry an explicit open permission block, but are still
-  fully open.** As of cycle 0013 the global `$default` rule **denies by default**
-  (`allow: { $default: 'false' }`, `src/lib/perms.ts`) — every entity without an
-  explicit block, including any future schema entity and any undeclared
-  namespace, is non-readable and non-writable by a client. `messages` (along with
-  `questions`, `endorsements`, and the `todos` demo) now carries its own explicit
-  `allow: { $default: 'true' }` block, so its openness is a visible, reviewable
-  decision rather than silent inheritance — but it is still *fully* open: any
-  client (including unauthenticated) can read every session's chat, create a
-  message spoofing another `participantId`, and edit or delete other students'
-  messages. Open cross-student reads are needed for the realtime stream, but
-  write/delete were never meant to stay open once rows exist. The `messageSession`
-  link exists precisely to enable a participant/owner-scoped rule; the real
-  tightening (scope `create` to the owning participant; `update` / `delete` to the
-  row owner + owning teacher/admin; keep reads open) remains the deferred Batch-2
-  follow-up, pushed with `npm run perms:push` before later cycles build on
-  `messages`.
+- **Chat message writes are now author-scoped; reads stay open by design.** As of
+  cycle 0013 the global `$default` rule **denies by default** (`allow: { $default:
+  'false' }`, `src/lib/perms.ts`) — every entity without an explicit block,
+  including any future schema entity and any undeclared namespace, is
+  non-readable and non-writable by a client. Cycle 0014 tightened `messages` from
+  the open default to an explicit, forgery-proof rule. **Reads stay open**
+  (`view: 'true'`) — the live cross-student stream depends on every client reading
+  every session's chat. **Create is author-scoped + anti-spoof**: you can only
+  post a message attributed to a participant you own (checked via the new
+  `messageParticipant` link, not the client-supplied `participantId` scalar), and
+  the stored scalar must match that linked participant — so a student can no
+  longer spoof another's identity. **Update/delete** are limited to the message's
+  author and the session's owning teacher (checked against the linked session's
+  `teacherId`). `questions` / `endorsements` (and the `todos` demo) remain the
+  intentionally-open namespaces. Migration/verification for this cycle: the
+  additive link is applied with `npx instant-cli push schema` (schema first, so
+  the rule's link traversal resolves), then the tightened rules with
+  `npm run perms:push`.
 - A **failed teacher-queue question query renders as the empty state.** The open
   questions derive from `qq.data?.questions ?? []`, so a `questions` live-query
   error falls through to the "no open questions yet" message — logged to the
