@@ -1,0 +1,14 @@
+{
+  "files": [
+    "AGENTS.md",
+    "CONTEXT.md",
+    "README.md",
+    "release-notes.md",
+    "src/lib/classify.test.ts",
+    "src/lib/classify.ts",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts"
+  ]
+}

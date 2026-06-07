@@ -1,5 +1,33 @@
 # Release Notes
 
+## Cycle 0009 — Auto-create a Question from messages ending in "?"
+
+- **New: a chat message ending in `?` now becomes a Question.** When a student
+  sends a message whose trimmed text ends with `?` (e.g. "what is mitosis?"), the
+  app now also creates a teacher-facing `Question` — a distinct participation unit
+  linked back to the originating message and the author participant — and appends a
+  replayable `QuestionCreated` event to the session timeline. A casual message
+  ("ok thanks") stays chat-only and creates no Question. This is the first cycle
+  that produces the `Question` object the teacher-facing half of the product is
+  built around. (`src/lib/classify.ts`, `src/lib/sessions.ts`, `src/lib/db.ts`)
+- **One swappable classification seam.** The decision lives behind a single pure
+  function, `classifyMessage` (`src/lib/classify.ts`) — today an interim, AI-free
+  trailing-`?` heuristic, designed so a later cycle can swap in AI classification
+  by editing only that function. The `questions` row id is derived deterministically
+  from the source message id, so re-sending the same logical message never creates a
+  duplicate Question. The row carries **no email** by design.
+- **No teacher-facing Question UI yet.** Questions are created but not yet rendered
+  to the teacher — that is a subsequent cycle. Permissions are unchanged
+  (`messages`/`questions` stay under the permissive default).
+- New unit coverage in `src/lib/classify.test.ts`, `src/lib/sessions.test.ts`, and
+  `src/lib/db.test.ts`, plus a new e2e suite `e2e/auto-create-question.spec.ts`
+  (a `?` message creates one linked Question + event; a non-`?` message stays
+  chat-only; skips loudly when admin env is unset).
+- **Migration / verification:** the schema gains three additive links
+  (`questionMessage`, `questionParticipant`, `questionSession`) — run
+  `npx instant-cli push schema` before the feature works against a schema-enforced
+  live app. No new env/config keys; no `perms:push` this cycle.
+
 ## Cycle 0007 — Student joins via link and becomes a participant
 
 - **New: students can now join a live session via its link and land in the

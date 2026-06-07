@@ -203,6 +203,19 @@ unset). The schema gains `messages.clientActionId` + a `messageSession` link thi
 cycle — push it once with `npx instant-cli push schema` before the feature works
 against a schema-enforced live app (no new `.env` keys).
 
+**Asking a question.** A chat message whose text ends with `?` (e.g. "what is
+mitosis?") now *also* becomes a **Question** — a distinct, teacher-facing
+participation unit linked back to your message — while a casual message ("ok
+thanks") stays chat-only. This is the durable object teachers will work from
+(their queue view arrives in a later cycle, so nothing new is shown to you yet).
+The decision lives behind one swappable function (`classifyMessage`,
+`src/lib/classify.ts`): today an interim trailing-`?` heuristic, later an AI call.
+Re-sending the same message never creates a duplicate Question, and the Question
+stores no email. This adds three additive schema links
+(`questionMessage`/`questionParticipant`/`questionSession`) — push them once with
+`npx instant-cli push schema` before the feature works against a schema-enforced
+live app (no new `.env` keys). The e2e suite is `e2e/auto-create-question.spec.ts`.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed

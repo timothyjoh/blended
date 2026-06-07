@@ -1,4 +1,5 @@
 import { db, id, writeEvent, type ProjectionTxn, type WriteEventMeta } from './db'
+import { classifyMessage, deriveQuestionId } from './classify'
 
 // ---------------------------------------------------------------------------
 // Session creation action (cycle 0005). Mirrors the pure-core pattern of
@@ -534,9 +535,73 @@ export function shouldSubmitChatMessage(input: {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Question promotion (cycle 0009). When `classifyMessage` says a stored chat
+// message is question-like (interim trailing-`?` heuristic), the submit path
+// dual-writes a teacher-facing `questions` row + a `QuestionCreated` event. The
+// `questions` row id is derived deterministically from the source message id so
+// a logical re-submit re-upserts the SAME Question row (keyed-upsert idempotency,
+// mirroring the message). The row carries NO email — privacy is structural.
+// ---------------------------------------------------------------------------
+
+/** The `questions` projection row promoted from a question-like message. */
+export type QuestionRecord = {
+  id: string
+  sessionId: string
+  messageId: string
+  participantId: string
+  status: 'submitted'
+  createdAt: number
+}
+
+export type BuildQuestionPlan = { record: QuestionRecord; meta: WriteEventMeta }
+
+/**
+ * Pure builder for the promoted Question, derived entirely from the already-built
+ * `ChatMessagePlan` so the two writes stay consistent. The question id is
+ * `deriveQuestionId(plan.record.id)` (deterministic + collision-free), and the
+ * row links back to its source message, author participant, and session. The
+ * envelope actor is the same student (`plan.meta.actor`). Throws synchronously on
+ * a structurally impossible plan (missing actor/session/participant) before any
+ * write — defensive; the message write already validated the same inputs.
+ */
+export function buildQuestion(plan: ChatMessagePlan): BuildQuestionPlan {
+  const messageId = plan.record.id
+  const sessionId = plan.record.sessionId
+  const participantId = plan.record.participantId
+  const userId = plan.meta.actor.id
+  if (!sessionId) throw new Error('buildQuestion: a sessionId is required')
+  if (!participantId) throw new Error('buildQuestion: a participantId is required')
+  if (!userId) throw new Error('buildQuestion: an author userId is required')
+
+  const questionId = deriveQuestionId(messageId)
+  const record: QuestionRecord = {
+    id: questionId,
+    sessionId,
+    messageId,
+    participantId,
+    status: 'submitted',
+    createdAt: plan.record.createdAt,
+  }
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: userId, role: 'student' },
+    payload: { questionId, messageId, participantId, sessionId, status: 'submitted', createdAt: record.createdAt },
+  }
+  return { record, meta }
+}
+
+const defaultQuestionTxn = (r: QuestionRecord): ProjectionTxn =>
+  db.tx.questions[r.id]
+    // Scalar columns only — `messageId`/`participantId` are LINKS, not stored
+    // columns, so the row carries no participant id or email.
+    .update({ sessionId: r.sessionId, status: r.status, createdAt: r.createdAt })
+    .link({ message: r.messageId, participant: r.participantId, session: r.sessionId })
+
 export type SubmitChatMessageDeps = {
   write?: typeof writeEvent
   buildTxn?: (record: MessageRecord) => ProjectionTxn
+  buildQuestionTxn?: (record: QuestionRecord) => ProjectionTxn
 }
 
 const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
@@ -565,6 +630,16 @@ const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
  * `shouldSubmitChatMessage` pre-check + `inFlight` latch suppress the duplicate
  * envelope. The rejection propagates to the caller and is never swallowed. `deps`
  * are injectable so the paths are unit-testable without a network.
+ *
+ * Cycle 0009: after the `ChatMessageSubmitted` write SUCCEEDS, the stored text is
+ * classified through the single `classifyMessage` seam. If it is question-like, a
+ * SECOND `writeEvent('QuestionCreated', …)` dual-writes the `questions` row +
+ * event in one transaction (so a Question failure is atomic — no orphan row, no
+ * orphan event). It is issued only after the message write commits, so a failed
+ * Question write leaves the message chat-only; the rejection propagates to the
+ * caller (logged/surfaced by `StudentChat`), never swallowed. Because both the
+ * message id and the derived question id are deterministic, a logical re-submit
+ * re-upserts the SAME rows, recovering a missing Question without a duplicate.
  */
 export async function submitChatMessage(
   input: BuildChatMessageInput,
@@ -573,6 +648,11 @@ export async function submitChatMessage(
   const plan = buildChatMessage(input)
   const write = deps.write ?? writeEvent
   const buildTxn = deps.buildTxn ?? defaultChatTxn
+  const buildQuestionTxn = deps.buildQuestionTxn ?? defaultQuestionTxn
   await write('ChatMessageSubmitted', plan.meta, [buildTxn(plan.record)])
+  if (classifyMessage(plan.record.text).isQuestion) {
+    const q = buildQuestion(plan)
+    await write('QuestionCreated', q.meta, [buildQuestionTxn(q.record)])
+  }
   return plan.record
 }

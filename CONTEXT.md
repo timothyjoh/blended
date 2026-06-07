@@ -51,7 +51,7 @@ Raw natural-language text a Participant submits to the Session chat. Students se
 _Avoid_: Chat (as the entity), post, comment
 
 **Question**:
-A Question-like participation unit. In this phase a Message whose text ends with `?` automatically also becomes a Question (an interim heuristic standing in for AI classification — designed to be swapped for AI with no other change). Questions are what the Teacher sees and acts on.
+A Question-like participation unit. In this phase a Message whose text ends with `?` automatically also becomes a Question (an interim heuristic standing in for AI classification — designed to be swapped for AI with no other change; the decision lives behind the single `classifyMessage` seam in `src/lib/classify.ts`, cycle 0009). Questions are what the Teacher sees and acts on.
 _Avoid_: Query, ask
 
 **Answered**:

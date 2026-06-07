@@ -81,6 +81,21 @@ const chatMessageSubmitted2: EventLike = {
   payload: { messageId: 'm2', participantId: 'p1', text: 'second message', createdAt: 6000 },
 }
 
+const questionCreated: EventLike = {
+  id: 'evt-7',
+  type: 'QuestionCreated',
+  occurredAt: 7000,
+  receivedAt: 7000,
+  payload: {
+    questionId: 'q1',
+    messageId: 'm1',
+    participantId: 'p1',
+    sessionId: 's1',
+    status: 'submitted',
+    createdAt: 7000,
+  },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -146,6 +161,53 @@ describe('applyEvent', () => {
     const base = emptyProjection('s1')
     applyEvent(base, chatMessageSubmitted)
     expect(base.messages).toEqual({})
+  })
+
+  it('folds QuestionCreated keyed by questionId without throwing', () => {
+    expect(() => applyEvent(emptyProjection('s1'), questionCreated)).not.toThrow()
+    const result = applyEvent(emptyProjection('s1'), questionCreated)
+    expect(result.questions.q1).toEqual({
+      id: 'q1',
+      messageId: 'm1',
+      participantId: 'p1',
+      sessionId: 's1',
+      status: 'submitted',
+      createdAt: 7000,
+    })
+  })
+
+  it('folds QuestionCreated defensively on a partial payload (keys by event id, no throw)', () => {
+    const partial: EventLike = {
+      id: 'evt-q-partial',
+      type: 'QuestionCreated',
+      occurredAt: 8000,
+      receivedAt: 8000,
+      payload: {},
+    }
+    const result = applyEvent(emptyProjection('s1'), partial)
+    // Keyed by event id when no questionId; status defaults to 'submitted',
+    // createdAt falls back to occurredAt, sessionId to the projection's session.
+    expect(result.questions['evt-q-partial']).toEqual({
+      id: 'evt-q-partial',
+      messageId: '',
+      participantId: '',
+      sessionId: 's1',
+      status: 'submitted',
+      createdAt: 8000,
+    })
+  })
+
+  it('re-folding the same QuestionCreated reproduces the identical entry (idempotent)', () => {
+    const once = applyEvent(emptyProjection('s1'), questionCreated)
+    const twice = applyEvent(once, questionCreated)
+    expect(twice.questions.q1).toEqual(once.questions.q1)
+    expect(Object.keys(twice.questions)).toEqual(['q1'])
+  })
+
+  it('does not mutate the input projection when folding a QuestionCreated', () => {
+    const base = emptyProjection('s1')
+    applyEvent(base, questionCreated)
+    expect(base.questions).toEqual({})
   })
 
   it('surfaces an unknown event type instead of dropping it', () => {
@@ -261,6 +323,33 @@ describe('rebuildSessionProjection determinism', () => {
     expect(inOrder.messages.m1.text).toBe('hello class')
     expect(inOrder.session?.status).toBe('live')
     expect(inOrder.participants.p1.username).toBe('ada')
+  })
+
+  it('rebuilds a stream including a promoted Question, regardless of input order', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      participantJoined,
+      chatMessageSubmitted,
+      questionCreated,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      questionCreated,
+      chatMessageSubmitted,
+      participantJoined,
+      sessionStarted,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    expect(Object.keys(inOrder.questions)).toEqual(['q1'])
+    expect(inOrder.questions.q1).toEqual({
+      id: 'q1',
+      messageId: 'm1',
+      participantId: 'p1',
+      sessionId: 's1',
+      status: 'submitted',
+      createdAt: 7000,
+    })
   })
 
   it('orders by occurredAt, then receivedAt, then id (§17.1)', () => {

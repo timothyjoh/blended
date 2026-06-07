@@ -161,6 +161,25 @@ export const schema = i.schema({
       forward: { on: 'messages', has: 'one', label: 'session' },
       reverse: { on: 'sessions', has: 'many', label: 'messages' },
     },
+    // Cycle 0009: a `questions` row is promoted from a single student `messages`
+    // row (the trailing-`?` heuristic in `classifyMessage`). These three links
+    // mirror `messageSession` (forward `one` / reverse `many`) so a Question
+    // points back to its source message, its author participant, and its session,
+    // and each of those can enumerate its questions. The links carry the
+    // relationship structurally — the `questions` row stores no participant id or
+    // email column, keeping privacy structural (SPEC §16.1).
+    questionMessage: {
+      forward: { on: 'questions', has: 'one', label: 'message' },
+      reverse: { on: 'messages', has: 'many', label: 'questions' },
+    },
+    questionParticipant: {
+      forward: { on: 'questions', has: 'one', label: 'participant' },
+      reverse: { on: 'participants', has: 'many', label: 'questions' },
+    },
+    questionSession: {
+      forward: { on: 'questions', has: 'one', label: 'session' },
+      reverse: { on: 'sessions', has: 'many', label: 'questions' },
+    },
   },
 })
 
@@ -199,6 +218,18 @@ export type SessionProjection = {
   session: { id: string; title: string; status: string; teacherId: string } | null
   participants: Record<string, { id: string; userId: string; role: string; username: string }>
   messages: Record<string, { id: string; participantId: string; text: string; createdAt: number }>
+  // Cycle 0009: teacher-facing Questions promoted from question-like messages.
+  questions: Record<
+    string,
+    {
+      id: string
+      messageId: string
+      participantId: string
+      sessionId: string
+      status: string
+      createdAt: number
+    }
+  >
 }
 
 /** Raised when `applyEvent` meets a type it does not know — never silently dropped. */
@@ -210,7 +241,7 @@ export class UnknownEventTypeError extends Error {
 }
 
 export function emptyProjection(sessionId: string): SessionProjection {
-  return { sessionId, session: null, participants: {}, messages: {} }
+  return { sessionId, session: null, participants: {}, messages: {}, questions: {} }
 }
 
 /**
@@ -310,6 +341,39 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
             id: messageId,
             participantId: typeof p.participantId === 'string' ? p.participantId : '',
             text: typeof p.text === 'string' ? p.text : '',
+            createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
+          },
+        },
+      }
+    }
+    case 'QuestionCreated': {
+      // Cycle 0009: fold a promoted Question into the `questions` map, keyed by
+      // the deterministic question id (derived from the source message id).
+      // Mirrors `ChatMessageSubmitted`: tolerant of absent prior state + partial
+      // payload (defensive defaults — `status` defaults to 'submitted', `createdAt`
+      // falls back to `occurredAt`, `sessionId` falls back to the projection's),
+      // never mutates input, and re-folding the same event reproduces the same
+      // entry. This keeps `rebuildSessionProjection` whole — `QuestionCreated`
+      // never reaches the `default` and so never raises `UnknownEventTypeError`.
+      const p = event.payload as {
+        questionId?: string
+        messageId?: string
+        participantId?: string
+        sessionId?: string
+        status?: string
+        createdAt?: number
+      }
+      const questionId = p.questionId ?? event.id
+      return {
+        ...projection,
+        questions: {
+          ...projection.questions,
+          [questionId]: {
+            id: questionId,
+            messageId: typeof p.messageId === 'string' ? p.messageId : '',
+            participantId: typeof p.participantId === 'string' ? p.participantId : '',
+            sessionId: typeof p.sessionId === 'string' ? p.sessionId : projection.sessionId,
+            status: typeof p.status === 'string' ? p.status : 'submitted',
             createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
           },
         },

@@ -17,7 +17,9 @@ import {
   buildChatMessage,
   shouldSubmitChatMessage,
   submitChatMessage,
+  buildQuestion,
 } from './sessions'
+import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
 
 describe('generateJoinCode', () => {
@@ -586,6 +588,15 @@ describe('submitChatMessage wrapper', () => {
     text: 'hello class',
   }
 
+  // A question-like submit: deterministic message + question ids for assertions.
+  const question = {
+    sessionId: 's1',
+    participantId: 'p1',
+    userId: 'u1',
+    clientActionId: '11111111-1111-4111-8111-111111111111',
+    text: 'what is mitosis?',
+  }
+
   it('calls write once with ChatMessageSubmitted and one projection txn', async () => {
     const calls: unknown[][] = []
     const write = (...args: unknown[]) => {
@@ -600,6 +611,91 @@ describe('submitChatMessage wrapper', () => {
     expect((calls[0][1] as { sessionId: string }).sessionId).toBe('s1')
     expect((calls[0][1] as { actor: { role: string } }).actor.role).toBe('student')
     expect(calls[0][2]).toHaveLength(1)
+  })
+
+  // Cycle 0009: a non-question message emits ONLY ChatMessageSubmitted.
+  it('does not emit a QuestionCreated for a non-question message', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    await submitChatMessage(ok, {
+      write: write as never,
+      buildTxn: () => ({}) as never,
+      buildQuestionTxn: () => ({}) as never,
+    })
+    expect(calls.map((c) => c[0])).toEqual(['ChatMessageSubmitted'])
+  })
+
+  // Cycle 0009: a question-like message dual-writes BOTH events, in order, with a
+  // correct QuestionCreated envelope + exactly one question projection txn.
+  it('emits ChatMessageSubmitted then QuestionCreated for a question-like message', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    await submitChatMessage(question, {
+      write: write as never,
+      buildTxn: () => ({}) as never,
+      buildQuestionTxn: () => ({}) as never,
+    })
+    expect(calls.map((c) => c[0])).toEqual(['ChatMessageSubmitted', 'QuestionCreated'])
+    const qMeta = calls[1][1] as {
+      sessionId: string
+      actor: { role: string }
+      payload: { questionId: string; messageId: string; participantId: string }
+    }
+    expect(qMeta.sessionId).toBe('s1')
+    expect(qMeta.actor.role).toBe('student')
+    expect(qMeta.payload.messageId).toBe(question.clientActionId)
+    expect(qMeta.payload.participantId).toBe('p1')
+    expect(qMeta.payload.questionId).toBe(deriveQuestionId(question.clientActionId))
+    // Exactly one question projection txn.
+    expect(calls[1][2]).toHaveLength(1)
+  })
+
+  // Idempotency: the same clientActionId derives the SAME question id on re-submit.
+  it('derives a stable question id for the same clientActionId (keyed-upsert idempotency)', async () => {
+    const ids: string[] = []
+    const write = (type: string, meta: { payload?: { questionId?: string } }) => {
+      if (type === 'QuestionCreated') ids.push(meta.payload!.questionId as string)
+      return Promise.resolve('ok')
+    }
+    await submitChatMessage(question, {
+      write: write as never,
+      buildTxn: () => ({}) as never,
+      buildQuestionTxn: () => ({}) as never,
+    })
+    await submitChatMessage(question, {
+      write: write as never,
+      buildTxn: () => ({}) as never,
+      buildQuestionTxn: () => ({}) as never,
+    })
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).toBe(ids[1])
+  })
+
+  // Failure path: the QuestionCreated write rejects AFTER ChatMessageSubmitted
+  // committed → the message write was observed, the rejection propagates (not
+  // swallowed), and no question txn is committed beyond the rejecting call.
+  it('propagates a QuestionCreated failure while keeping the message committed', async () => {
+    const committed: string[] = []
+    const write = (type: string) => {
+      if (type === 'QuestionCreated') return Promise.reject(new Error('question write failed'))
+      committed.push(type)
+      return Promise.resolve('ok')
+    }
+    await expect(
+      submitChatMessage(question, {
+        write: write as never,
+        buildTxn: () => ({}) as never,
+        buildQuestionTxn: () => ({}) as never,
+      })
+    ).rejects.toThrow(/question write failed/)
+    // The first (message) write succeeded; the chat message is NOT lost.
+    expect(committed).toEqual(['ChatMessageSubmitted'])
   })
 
   // Failure path: a rejected write propagates — it is not swallowed.
@@ -624,5 +720,51 @@ describe('submitChatMessage wrapper', () => {
       )
     ).rejects.toThrow(/cannot be blank/)
     expect(called).toBe(false)
+  })
+})
+
+describe('buildQuestion', () => {
+  const plan = buildChatMessage({
+    sessionId: 's1',
+    participantId: 'p1',
+    userId: 'u1',
+    clientActionId: '11111111-1111-4111-8111-111111111111',
+    text: 'what is mitosis?',
+    now: 4242,
+  })
+
+  it('derives the record from the message plan with a deterministic question id', () => {
+    const { record } = buildQuestion(plan)
+    expect(record).toEqual({
+      id: deriveQuestionId(plan.record.id),
+      sessionId: 's1',
+      messageId: plan.record.id,
+      participantId: 'p1',
+      status: 'submitted',
+      createdAt: 4242,
+    })
+  })
+
+  it('carries no email on the record (privacy is structural)', () => {
+    const { record } = buildQuestion(plan)
+    expect(record).not.toHaveProperty('email')
+  })
+
+  it('builds a student-actor envelope referencing message/participant/question ids', () => {
+    const { meta } = buildQuestion(plan)
+    expect(meta.sessionId).toBe('s1')
+    expect(meta.actor).toEqual({ id: 'u1', role: 'student' })
+    expect(meta.payload).toMatchObject({
+      questionId: deriveQuestionId(plan.record.id),
+      messageId: plan.record.id,
+      participantId: 'p1',
+      sessionId: 's1',
+      status: 'submitted',
+    })
+  })
+
+  it('the derived question id differs from the source message id', () => {
+    const { record } = buildQuestion(plan)
+    expect(record.id).not.toBe(record.messageId)
   })
 })
