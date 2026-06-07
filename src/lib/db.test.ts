@@ -220,6 +220,19 @@ const resourceUrlChanged2: EventLike = {
   },
 }
 
+// Cycle 0018: a teacher's client recorded a settled embed outcome on r1.
+const resourceEmbedBlocked: EventLike = {
+  id: 'evt-30',
+  type: 'ResourceEmbedChecked',
+  occurredAt: 30000,
+  receivedAt: 30000,
+  payload: {
+    sessionId: 's1',
+    resourceId: 'r1',
+    embedStatus: 'blocked',
+  },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -604,6 +617,65 @@ describe('applyEvent', () => {
     const created = applyEvent(emptyProjection('s1'), sessionCreated)
     applyEvent(created, resourceUrlChanged)
     expect(created.session).not.toHaveProperty('currentUrl')
+  })
+
+  it('folds ResourceEmbedChecked onto an existing resource entry, setting embedStatus (cycle 0018)', () => {
+    const queued = applyEvent(emptyProjection('s1'), resourceQueued)
+    const result = applyEvent(queued, resourceEmbedBlocked)
+    expect(result.resources['r1']).toEqual({
+      id: 'r1',
+      sessionId: 's1',
+      url: 'https://example.com/slides',
+      title: 'Intro slides',
+      type: 'google_slides',
+      sortOrder: 0,
+      createdAt: 10000,
+      embedStatus: 'blocked',
+    })
+  })
+
+  it('folds ResourceEmbedChecked with no prior resource entry into a minimal entry (tolerant)', () => {
+    const result = applyEvent(emptyProjection('s1'), resourceEmbedBlocked)
+    expect(result.resources['r1']).toEqual({
+      id: 'r1',
+      sessionId: 's1',
+      url: '',
+      title: '',
+      type: 'generic_url',
+      sortOrder: 0,
+      createdAt: 30000,
+      embedStatus: 'blocked',
+    })
+  })
+
+  it('type-guards a ResourceEmbedChecked payload with a non-string embedStatus to undefined', () => {
+    const malformed: EventLike = {
+      id: 'evt-bad3',
+      type: 'ResourceEmbedChecked',
+      occurredAt: 31000,
+      receivedAt: 31000,
+      payload: { sessionId: 's1', resourceId: 'r1', embedStatus: 7 },
+    }
+    const queued = applyEvent(emptyProjection('s1'), resourceQueued)
+    const result = applyEvent(queued, malformed)
+    expect(result.resources['r1'].embedStatus).toBeUndefined()
+  })
+
+  it('re-folding the same ResourceEmbedChecked reproduces the identical entry (idempotent)', () => {
+    const queued = applyEvent(emptyProjection('s1'), resourceQueued)
+    const once = applyEvent(queued, resourceEmbedBlocked)
+    const twice = applyEvent(once, resourceEmbedBlocked)
+    expect(twice.resources['r1']).toEqual(once.resources['r1'])
+  })
+
+  it('does not throw on ResourceEmbedChecked (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), resourceEmbedBlocked)).not.toThrow()
+  })
+
+  it('does not mutate the input projection when folding a ResourceEmbedChecked', () => {
+    const queued = applyEvent(emptyProjection('s1'), resourceQueued)
+    applyEvent(queued, resourceEmbedBlocked)
+    expect(queued.resources['r1']).not.toHaveProperty('embedStatus')
   })
 
   it('surfaces an unknown event type instead of dropping it', () => {

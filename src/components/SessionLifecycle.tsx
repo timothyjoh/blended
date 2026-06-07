@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { db } from '@/lib/db'
 import { useAuth } from '@/lib/useAuth'
 import {
@@ -9,6 +9,7 @@ import {
   queueResource,
   activateResource,
   broadcastResourceUrl,
+  recordEmbedStatus,
   RESOURCE_TYPES,
 } from '@/lib/sessions'
 import { validateResourceUrl } from '@/lib/resources'
@@ -110,6 +111,15 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
   const [broadcastUrl, setBroadcastUrl] = useState('')
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [broadcastPending, setBroadcastPending] = useState(false)
+
+  // Cycle 0018: blocked-embed fallback. A dedicated error string surfaced inline
+  // (never swallowed) when the teacher-side `recordEmbedStatus` write is rejected,
+  // and a per-resource latch (keyed by resource id + the broadcast version) that —
+  // together with a convergence guard against the live `embedStatus` — suppresses
+  // duplicate `ResourceEmbedChecked` writes from repeated detections. The latch key
+  // includes the version token so a re-broadcast/re-activation re-checks the embed.
+  const [embedStatusError, setEmbedStatusError] = useState<string | null>(null)
+  const embedWrittenRef = useRef<Set<string>>(new Set())
 
   // Query errors: surface them (never swallow). The controls are gated on a
   // loaded session below, so a failed query renders the non-actionable error
@@ -252,6 +262,47 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
       console.error('[SessionLifecycle] broadcast failed:', err)
     } finally {
       setBroadcastPending(false)
+    }
+  }
+
+  // Cycle 0018: the live active resource (for the pane's fallback title + the
+  // convergence guard). Matched by the session's `activeResourceId`.
+  const activeResource = resources.find((r) => r.id === session?.activeResourceId) ?? null
+
+  // Cycle 0018: the `ResourcePane` reports a settled blocked/failed embed. Persist
+  // it via the sole sanctioned `recordEmbedStatus` path. A per-resource latch +
+  // convergence guard suppress duplicate writes from repeated detections; a
+  // rejected write surfaces inline (`role="alert"`) + `console.error` and is never
+  // swallowed — the fallback card (prop-driven in the pane) stays visible
+  // regardless. The latch key folds in the version token so a re-broadcast/
+  // re-activation re-checks the new embed.
+  async function onEmbedBlocked(detected: 'blocked' | 'failed') {
+    setEmbedStatusError(null)
+    const resourceId = session?.activeResourceId
+    if (!user?.id || !resourceId) return
+    const latchKey = `${resourceId}::${session?.currentUrlVersion ?? session?.currentUrl ?? ''}`
+    if (embedWrittenRef.current.has(latchKey)) return
+    if (activeResource?.embedStatus === detected) {
+      // Already converged to this status — don't re-append an event, but latch so
+      // repeated detections of the same settled outcome stay quiet.
+      embedWrittenRef.current.add(latchKey)
+      return
+    }
+    embedWrittenRef.current.add(latchKey)
+    try {
+      await recordEmbedStatus({
+        sessionId,
+        resourceId,
+        embedStatus: detected,
+        actor: { id: user.id, role: 'teacher' },
+      })
+    } catch (err) {
+      // Allow a retry on failure: drop the latch, surface inline + log. The card
+      // stays visible (the visual guarantee does not depend on this write).
+      embedWrittenRef.current.delete(latchKey)
+      const message = err instanceof Error ? err.message : String(err)
+      setEmbedStatusError(message)
+      console.error('[SessionLifecycle] record embed status failed:', err)
     }
   }
 
@@ -463,12 +514,26 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
             ) : null}
           </div>
           {/* Cycle 0016: the shared pane, driven by the live session row.
-              Cycle 0017: version-keyed so each broadcast remounts the iframe. */}
+              Cycle 0017: version-keyed so each broadcast remounts the iframe.
+              Cycle 0018: supply the active resource title for the fallback card
+              heading and a teacher-only callback that records a settled
+              blocked/failed embed outcome. */}
           <ResourcePane
             activeResourceId={session.activeResourceId}
             currentUrl={session.currentUrl}
             currentUrlVersion={session.currentUrlVersion}
+            title={activeResource?.title}
+            onEmbedBlocked={onEmbedBlocked}
           />
+          {embedStatusError ? (
+            <p
+              data-testid="embed-status-error"
+              role="alert"
+              className="text-sm text-destructive"
+            >
+              {embedStatusError}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

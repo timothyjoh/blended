@@ -268,8 +268,11 @@ export type SessionProjection = {
     }
   >
   // Cycle 0015: teacher-queued lesson resources, keyed by resource id, ordered
-  // for display by `sortOrder` (tie-broken by id). Carries only the render fields
-  // — deferred-feature fields (embedMode/embedStatus/activatedAt) are not folded.
+  // for display by `sortOrder` (tie-broken by id). Carries the render fields plus
+  // — cycle 0018 — the folded `embedStatus` (the other deferred fields
+  // `embedMode`/`activatedAt` remain unfolded). `embedStatus` is optional: a
+  // resource starts `unchecked` and only carries a folded value once a teacher's
+  // client records a settled embed outcome via `ResourceEmbedChecked`.
   resources: Record<
     string,
     {
@@ -280,6 +283,7 @@ export type SessionProjection = {
       type: string
       sortOrder: number
       createdAt: number
+      embedStatus?: string
     }
   >
 }
@@ -565,6 +569,41 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
               currentUrl,
               currentUrlVersion,
             },
+      }
+    }
+    case 'ResourceEmbedChecked': {
+      // Cycle 0018: a teacher's client recorded a settled embed outcome (the
+      // `ResourcePane` detected a blocked/failed embed). Set the resource's
+      // `embedStatus` on its `resources` map entry. Mirrors `ResourceQueued`:
+      // tolerant of an absent prior entry (build a minimal one from the payload),
+      // type-guards each field to `undefined`, never mutates input, and re-folds
+      // convergently (re-setting the same status reproduces the same entry). Keeps
+      // `rebuildSessionProjection` whole — never reaches the throwing `default`.
+      const p = event.payload as {
+        sessionId?: string
+        resourceId?: string
+        embedStatus?: string
+      }
+      const resourceId = typeof p.resourceId === 'string' ? p.resourceId : event.id
+      const embedStatus = typeof p.embedStatus === 'string' ? p.embedStatus : undefined
+      const prev = projection.resources[resourceId]
+      return {
+        ...projection,
+        resources: {
+          ...projection.resources,
+          [resourceId]: prev
+            ? { ...prev, embedStatus }
+            : {
+                id: resourceId,
+                sessionId: typeof p.sessionId === 'string' ? p.sessionId : projection.sessionId,
+                url: '',
+                title: '',
+                type: 'generic_url',
+                sortOrder: 0,
+                createdAt: event.occurredAt,
+                embedStatus,
+              },
+        },
       }
     }
     default:

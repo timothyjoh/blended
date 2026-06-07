@@ -19,6 +19,15 @@ import ResourcePane from './ResourcePane'
 // re-renders and the pane switches with no reload; a context that loads after
 // activation immediately shows the current active resource; before any activation
 // it renders an explicit empty state.
+//
+// Cycle 0018: a NARROWLY-scoped active-resource title read (a live query over the
+// single `sessionResources` row whose id is `session.activeResourceId`; open reads
+// permit this) feeds the fallback card's heading — with a hostname fallback when
+// the title is absent, so the student card is never headingless. The student pane
+// passes NO `onEmbedBlocked` callback: students lack `sessionResources` write
+// permission by design, so their fallback card is local-only (no
+// `ResourceEmbedChecked` write). A title-query error is logged and degrades to the
+// hostname heading — never blank, never a crash.
 // ---------------------------------------------------------------------------
 
 export default function StudentSession({ joinCode }: { joinCode: string }) {
@@ -30,9 +39,20 @@ export default function StudentSession({ joinCode }: { joinCode: string }) {
   )
   const participants = partsQ.data?.participants ?? []
 
+  // Cycle 0018: a narrowly-scoped read of the single active resource, for the
+  // fallback card heading. Open reads permit this; the card degrades to the URL
+  // hostname when no title is resolvable.
+  const resQ = db.useQuery(
+    session?.activeResourceId
+      ? { sessionResources: { $: { where: { id: session.activeResourceId } } } }
+      : null
+  )
+  const activeResourceTitle = resQ.data?.sessionResources?.[0]?.title ?? null
+
   // Query errors: surface (never swallow). Rendered as the error state below.
   if (sessionQ.error) console.error('[StudentSession] session query error:', sessionQ.error)
   if (partsQ.error) console.error('[StudentSession] participants query error:', partsQ.error)
+  if (resQ.error) console.error('[StudentSession] active resource query error:', resQ.error)
 
   if (sessionQ.error) {
     return (
@@ -84,6 +104,7 @@ export default function StudentSession({ joinCode }: { joinCode: string }) {
         activeResourceId={session.activeResourceId}
         currentUrl={session.currentUrl}
         currentUrlVersion={session.currentUrlVersion}
+        title={activeResourceTitle}
       />
       <div>
         <p className="text-sm text-muted-foreground">In this session:</p>

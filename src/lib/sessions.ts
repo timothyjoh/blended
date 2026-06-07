@@ -1163,3 +1163,99 @@ export async function broadcastResourceUrl(
   await write('ResourceUrlChanged', plan.meta, [buildTxn(plan)])
   return plan
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 0018: Record a settled embed outcome — the SOLE sanctioned writer of a
+// resource's `embedStatus`. When the shared `ResourcePane` detects a blocked/
+// failed embed (a bounded load timeout, or an `onError`), the teacher's client
+// records the outcome: we dual-write a `ResourceEmbedChecked` event and set
+// `sessionResources[id].embedStatus` (`unchecked` → `blocked`/`failed`) in ONE
+// transaction (ADR-0001/ADR-0003). Mirrors the cycle-0016 activation path: a pure
+// total builder that throws BEFORE producing any plan, a thin wrapper routing the
+// dual-write through `writeEvent`, and an exported default txn. No projection-only
+// write may exist outside `writeEvent()`. The teacher write is convergent
+// (re-setting an identical status); the component supplies a convergence guard +
+// per-resource latch so repeated detections do not append duplicate events.
+// Students cannot reach this path (no `sessionResources` write permission); their
+// fallback card is local-only. No schema push (`embedStatus` already exists) and
+// no `perms:push` (the owner-only update rule admits a teacher `embedStatus`
+// update on the already-linked row).
+// ---------------------------------------------------------------------------
+
+export type EmbedStatus = 'blocked' | 'failed'
+
+export type BuildEmbedStatusCheckInput = {
+  sessionId: string | null | undefined
+  resourceId: string | null | undefined
+  actor: { id: string | null | undefined; role: string }
+  embedStatus: string | null | undefined
+}
+
+export type EmbedStatusCheckPlan = {
+  sessionId: string
+  resourceId: string
+  embedStatus: EmbedStatus
+  meta: WriteEventMeta
+}
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A non-teacher actor,
+ * a missing `actor.id`/`sessionId`/`resourceId`, or a status outside
+ * `{blocked, failed}` is rejected by throwing synchronously — so nothing is ever
+ * written for an invalid check. The envelope hard-sets `actor.role: 'teacher'`;
+ * the payload carries `sessionId`/`resourceId`/`embedStatus` so it folds cleanly
+ * through `applyEvent`'s `ResourceEmbedChecked` case.
+ */
+export function buildEmbedStatusCheck(input: BuildEmbedStatusCheckInput): EmbedStatusCheckPlan {
+  if (input.actor?.role !== 'teacher')
+    throw new Error('recordEmbedStatus: only a teacher may record embed status')
+  const teacherId = input.actor?.id
+  if (!teacherId) throw new Error('recordEmbedStatus: an actor userId is required')
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('recordEmbedStatus: a sessionId is required')
+  const resourceId = input.resourceId
+  if (!resourceId) throw new Error('recordEmbedStatus: a resourceId is required')
+  const embedStatus = input.embedStatus
+  if (embedStatus !== 'blocked' && embedStatus !== 'failed')
+    throw new Error('recordEmbedStatus: embedStatus must be blocked or failed')
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: teacherId, role: 'teacher' },
+    payload: { sessionId, resourceId, embedStatus },
+  }
+  return { sessionId, resourceId, embedStatus, meta }
+}
+
+// Updates the EXISTING sessionResources row (its `session` link was set at create,
+// cycle 0015), so NO `.link({ session })` — the owner-only update rule resolves
+// authorship via the stored link, exactly as `defaultResourceActivateTxn` relies
+// on the existing row.
+export const defaultEmbedStatusTxn = (plan: EmbedStatusCheckPlan): ProjectionTxn =>
+  db.tx.sessionResources[plan.resourceId].update({ embedStatus: plan.embedStatus })
+
+export type RecordEmbedStatusDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (plan: EmbedStatusCheckPlan) => ProjectionTxn
+}
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then
+ * dual-writes the `ResourceEmbedChecked` envelope + the keyed `sessionResources`
+ * update in ONE `writeEvent` transaction. A rejected write leaves no partial state
+ * (no orphan event, unchanged `embedStatus`). The projection update is convergent
+ * (re-setting an identical status), so a retry after a rejection is safe; the
+ * component (cycle 0018 teacher callback) supplies the convergence guard +
+ * per-resource latch that suppress duplicate events from repeated detections. The
+ * rejection propagates and is never swallowed. `deps` are injectable so the
+ * validation and rejection paths are unit-testable without a network.
+ */
+export async function recordEmbedStatus(
+  input: BuildEmbedStatusCheckInput,
+  deps: RecordEmbedStatusDeps = {}
+): Promise<EmbedStatusCheckPlan> {
+  const plan = buildEmbedStatusCheck(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultEmbedStatusTxn
+  await write('ResourceEmbedChecked', plan.meta, [buildTxn(plan)])
+  return plan
+}

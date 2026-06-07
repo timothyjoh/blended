@@ -288,8 +288,8 @@ lands directly on the current resource. The active row is marked and its button
 reads **Active**; before anything is activated, both panes show an explicit
 "no active resource yet" state rather than a blank region.
 
-The resource renders in a **sandboxed iframe** (no same-origin escalation; some
-sites refuse to embed — a blocked-embed fallback is a later cycle). Activation is
+The resource renders in a **sandboxed iframe** (no same-origin escalation; for
+sites that refuse to embed, see the blocked-embed fallback below). Activation is
 admitted only for the owning teacher: each activation writes a replayable
 `ResourceActivated` event together with the session's `activeResourceId` + a
 derived `currentUrl` in one transaction (a rejected write leaves the active
@@ -326,6 +326,30 @@ rejected write leaves the broadcast position unchanged).
 field — run `npx instant-cli push schema` before the feature works against the
 live app. **No permission push** is needed (it inherits the existing `sessions`
 owner-only-write rule). The e2e suite is `e2e/broadcast-resource-url.spec.ts`.
+
+## Blocked-embed fallback — never a blank pane (teacher + students)
+
+Many real lesson URLs refuse to be embedded (sites send `X-Frame-Options` or a
+CSP `frame-ancestors` header), and the sandboxed pane deliberately can't run
+same-origin content — so an embed can come up blank or broken. Instead of leaving
+anyone staring at an empty rectangle, the pane now shows a **fallback card**:
+the resource's title, its URL as readable text, and an **Open externally** button
+that launches it in a new browser tab. Everyone in the room sees it — the teacher
+**and** every connected student — so the lesson continues with one click. A URL
+that *does* embed still renders inline with no card and no flicker.
+
+Detection is best-effort and client-side: a short, bounded load timeout is the
+dependable trigger (browsers don't reliably report framing refusals), and a
+successful load cancels it so embeddable URLs never show a false fallback.
+Switching or broadcasting re-checks the new URL. When a non-embeddable resource is
+detected, the teacher's client records a replayable `ResourceEmbedChecked` event
+and flips the resource's embed status to `blocked`/`failed`, so the session
+timeline carries evidence the embed was checked. Students show the same card but
+write nothing (the fallback is local to their view).
+
+**No schema or permission push** is needed this cycle (the `embedStatus` field and
+the owner-only resource-write rule already exist). The e2e suite is
+`e2e/blocked-embed-fallback.spec.ts`.
 
 ### Known limitations
 
@@ -406,13 +430,18 @@ owner-only-write rule). The e2e suite is `e2e/broadcast-resource-url.spec.ts`.
   write, not the query itself, so a teacher whose query is failing can wrongly
   assume nothing has been asked. A future cycle should route `qq.error` to the
   alert surface and suppress the empty-state copy.
-- **An activated resource that refuses to be framed renders as a broken pane.**
-  `ResourcePane` points a sandboxed iframe straight at the active `currentUrl`
-  with no blocked-embed fallback — a site that denies framing
-  (`X-Frame-Options`/CSP) shows a blank or browser-error frame rather than a
-  graceful "this resource can't be embedded" message. `embedMode` stays
-  `'blocked'` as queued and is not consulted yet; the embed-checking fallback is
-  a later cycle.
+- **Blocked-embed detection is a bounded timeout, so a slow-but-valid embed can
+  show the fallback card.** As of cycle 0018 a non-embeddable resource shows the
+  "Open externally" fallback card instead of a blank pane, but detection is
+  best-effort and client-side: the trigger is a fixed load timeout
+  (`EMBED_LOAD_TIMEOUT_MS`), since browsers don't reliably report framing
+  refusals. A genuinely slow embed that hasn't loaded by the deadline therefore
+  shows the card, and because the iframe is unmounted once the card appears, a
+  late successful load cannot recover the inline frame — the card stays until
+  `activeResourceId`/`currentUrlVersion` changes (re-checking the embed). This
+  degraded-but-visible outcome is accepted as preferable to a blank pane.
+  Server-side preflight probing, a `failed`→retry/recovery affordance, and
+  auto-re-embedding once a URL is later found embeddable remain later cycles.
 - The **resource-activation** dual-write, the live cross-context pane sync, and
   the per-row Activate control are exercised end-to-end only by
   `e2e/activate-resource.spec.ts`, which skips (loudly, but green) when

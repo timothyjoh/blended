@@ -35,10 +35,14 @@ import {
   buildResourceUrlChange,
   broadcastResourceUrl,
   defaultResourceUrlChangeTxn,
+  buildEmbedStatusCheck,
+  recordEmbedStatus,
+  defaultEmbedStatusTxn,
   type SessionListRow,
   type SessionResourceRecord,
   type ResourceActivatePlan,
   type ResourceUrlChangePlan,
+  type EmbedStatusCheckPlan,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -1640,6 +1644,155 @@ describe('defaultResourceUrlChangeTxn (real projection txn, cycle 0017)', () => 
 
   it('emits no link op (the session row already exists)', () => {
     const txn = defaultResourceUrlChangeTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    expect(txn.__ops.find((op) => op[0] === 'link')).toBeUndefined()
+  })
+})
+
+describe('buildEmbedStatusCheck (cycle 0018)', () => {
+  const okInput = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    actor: { id: 'teacher-1', role: 'teacher' },
+    embedStatus: 'blocked',
+  }
+
+  it('produces the plan + ResourceEmbedChecked envelope on valid input', () => {
+    const plan = buildEmbedStatusCheck(okInput)
+    expect(plan).toEqual({
+      sessionId: 's1',
+      resourceId: 'r1',
+      embedStatus: 'blocked',
+      meta: {
+        sessionId: 's1',
+        actor: { id: 'teacher-1', role: 'teacher' },
+        payload: { sessionId: 's1', resourceId: 'r1', embedStatus: 'blocked' },
+      },
+    })
+  })
+
+  it('accepts a failed status as well as blocked', () => {
+    expect(buildEmbedStatusCheck({ ...okInput, embedStatus: 'failed' }).embedStatus).toBe('failed')
+  })
+
+  it('hard-sets the envelope actor.role to teacher', () => {
+    expect(buildEmbedStatusCheck(okInput).meta.actor).toEqual({ id: 'teacher-1', role: 'teacher' })
+  })
+
+  it('throws on a non-teacher actor (before any plan)', () => {
+    expect(() =>
+      buildEmbedStatusCheck({ ...okInput, actor: { id: 'u1', role: 'student' } })
+    ).toThrow(/only a teacher/)
+  })
+
+  it('throws on a missing actor id', () => {
+    expect(() =>
+      buildEmbedStatusCheck({ ...okInput, actor: { id: null, role: 'teacher' } })
+    ).toThrow(/actor userId is required/)
+  })
+
+  it('throws on a missing sessionId', () => {
+    expect(() => buildEmbedStatusCheck({ ...okInput, sessionId: null })).toThrow(
+      /sessionId is required/
+    )
+  })
+
+  it('throws on a missing resourceId', () => {
+    expect(() => buildEmbedStatusCheck({ ...okInput, resourceId: null })).toThrow(
+      /resourceId is required/
+    )
+  })
+
+  it('throws on a status outside {blocked, failed} — unchecked', () => {
+    expect(() => buildEmbedStatusCheck({ ...okInput, embedStatus: 'unchecked' })).toThrow(
+      /embedStatus must be blocked or failed/
+    )
+  })
+
+  it('throws on a status outside {blocked, failed} — embeddable', () => {
+    expect(() => buildEmbedStatusCheck({ ...okInput, embedStatus: 'embeddable' })).toThrow(
+      /embedStatus must be blocked or failed/
+    )
+  })
+
+  it('throws on a missing status', () => {
+    expect(() => buildEmbedStatusCheck({ ...okInput, embedStatus: undefined })).toThrow(
+      /embedStatus must be blocked or failed/
+    )
+  })
+})
+
+describe('recordEmbedStatus (cycle 0018)', () => {
+  const okInput = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+    embedStatus: 'blocked',
+  }
+
+  it('dual-writes ResourceEmbedChecked with exactly one projection txn', async () => {
+    let calledType: string | null = null
+    let calledTxnCount = -1
+    const write = (type: string, _meta: unknown, txns: unknown[]) => {
+      calledType = type
+      calledTxnCount = txns.length
+      return Promise.resolve()
+    }
+    const buildTxn = (p: EmbedStatusCheckPlan) => ({ marker: p.resourceId }) as never
+    const plan = await recordEmbedStatus(okInput, { write: write as never, buildTxn })
+    expect(calledType).toBe('ResourceEmbedChecked')
+    expect(calledTxnCount).toBe(1)
+    expect(plan.resourceId).toBe('r1')
+    expect(plan.embedStatus).toBe('blocked')
+  })
+
+  it('does not write when the builder rejects a non-teacher actor (no txn)', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      recordEmbedStatus(
+        { ...okInput, actor: { id: 'u1', role: 'student' } as never },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/only a teacher/)
+    expect(called).toBe(false)
+  })
+
+  it('does not catch a rejecting write — the rejection propagates', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      recordEmbedStatus(okInput, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('defaultEmbedStatusTxn (real projection txn, cycle 0018)', () => {
+  const plan: EmbedStatusCheckPlan = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    embedStatus: 'blocked',
+    meta: {
+      sessionId: 's1',
+      actor: { id: 'teacher-1', role: 'teacher' },
+      payload: { sessionId: 's1', resourceId: 'r1', embedStatus: 'blocked' },
+    },
+  }
+
+  it('keys the sessionResources row and sets embedStatus', () => {
+    const txn = defaultEmbedStatusTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const updateOp = txn.__ops.find((op) => op[0] === 'update')
+    expect(updateOp![2]).toBe('r1')
+    expect(updateOp![3]).toEqual({ embedStatus: 'blocked' })
+  })
+
+  it('emits no link op (the resource row already exists, linked at create)', () => {
+    const txn = defaultEmbedStatusTxn(plan) as unknown as {
       __ops: [string, string, string, Record<string, unknown>][]
     }
     expect(txn.__ops.find((op) => op[0] === 'link')).toBeUndefined()
