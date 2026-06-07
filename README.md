@@ -41,6 +41,7 @@ All commands are run from the root of the project, from a terminal:
 | `npm run test`            | Run Vitest unit tests                            |
 | `npm run test:coverage`   | Run unit tests with a coverage report            |
 | `npm run test:e2e`        | Run Playwright e2e (after `test:e2e:install`)    |
+| `npm run schema:push`     | Push the InstantDB schema to the live app (fail-loud) |
 | `npm run perms:push`      | Push InstantDB permission rules (fail-loud)      |
 
 ## Data Layer & Event Spine
@@ -54,9 +55,12 @@ replayable record (see `docs/adr/0001-…` and `docs/adr/0003-…`). The dev-onl
 `/dev/event-spine` route demonstrates it live across browser windows.
 
 Before deploying against an Instant app with schema enforcement enabled, push
-the schema once with `npx instant-cli push schema` — otherwise every
-`writeEvent()` transaction is rejected (the rejection surfaces to the caller, it
-is not silent).
+the schema with **`npm run schema:push`** — a fail-loud, idempotent wrapper
+around `npx instant-cli push schema` that exits non-zero with a clear message on
+a missing app id or a CLI/auth/network failure, and is safe to re-run
+(declarative). Otherwise every `writeEvent()` transaction is rejected (the
+rejection surfaces to the caller, it is not silent). Run it **before**
+`npm run perms:push` (see the deploy order below).
 
 ### Permission rules
 
@@ -70,16 +74,18 @@ non-readable and non-writable by a client; every new schema entity must therefor
 ship its own rule (a structural guard in `src/lib/perms.test.ts` fails loudly
 otherwise). The rules live in `src/lib/perms.ts` (root `instant.perms.ts` is the
 CLI adapter). After
-`push schema`, push them with **`npm run perms:push`** — a fail-loud wrapper
-around `npx instant-cli push perms` that exits non-zero with a clear message if
-the app id or `instant-cli` auth is missing, and is safe to re-run (declarative).
+`npm run schema:push`, push them with **`npm run perms:push`** — a fail-loud
+wrapper around `npx instant-cli push perms` that exits non-zero with a clear
+message if the app id or `instant-cli` auth is missing, and is safe to re-run
+(declarative). The order matters: the perms rules reference schema-defined
+links/attrs, so the schema must be live first.
 No new required environment variable is introduced (the e2e-only
 `INSTANT_ADMIN_TOKEN`, used by the permissions Playwright suite, is already
 documented below).
 
 > **Not yet live.** These rules ship in the repo but are **inert until an
-> operator pushes them**. Until `npx instant-cli push schema` and
-> `npm run perms:push` have been run against the app (and `e2e/permissions.spec.ts`
+> operator pushes them**. Until `npm run schema:push` and
+> `npm run perms:push` have been run against the app, in that order (and `e2e/permissions.spec.ts`
 > has been run with `INSTANT_ADMIN_TOKEN` set — it skips loudly otherwise),
 > email privacy and session-write authorization are enforced by convention only,
 > exactly as before this cycle.
@@ -101,8 +107,8 @@ the shared `useAuth` hook (`src/lib/useAuth.ts`); product code never calls
 `db.useAuth()` directly.
 
 To exercise it locally: set `PUBLIC_INSTANTDB_APP_ID` in `.env`, push the schema
-to your Instant app once (`npx instant-cli push schema`) so `users` writes are
-accepted, run `npm run dev`, and visit `/login`.
+to your Instant app with `npm run schema:push` so `users` writes are accepted,
+run `npm run dev`, and visit `/login`.
 
 The Playwright auth suite (`e2e/auth.spec.ts`) needs a deterministic code path,
 so it mints codes via the InstantDB **admin** SDK (`generateMagicCode` — no

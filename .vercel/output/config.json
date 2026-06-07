@@ -20,6 +20,14 @@
 			"dest": "_render"
 		},
 		{
+			"src": "^/admin/?$",
+			"dest": "_render"
+		},
+		{
+			"src": "^/api/admin/bootstrap/?$",
+			"dest": "_render"
+		},
+		{
 			"src": "^/blog/([^/]+?)/?$",
 			"dest": "_render"
 		},
@@ -41,6 +49,10 @@
 		},
 		{
 			"src": "^/dev/perms-probe/?$",
+			"dest": "_render"
+		},
+		{
+			"src": "^/e2e/hang/?$",
 			"dest": "_render"
 		},
 		{

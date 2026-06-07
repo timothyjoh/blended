@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
+    "schema:push": "node scripts/push-schema.mjs",
     "perms:push": "node scripts/push-perms.mjs"
   },
   "dependencies": {
