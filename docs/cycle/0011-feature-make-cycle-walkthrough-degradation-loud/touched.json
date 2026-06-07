@@ -1,0 +1,9 @@
+{
+  "files": [
+    ".cycle/prompts/reflection.md",
+    "AGENTS.md",
+    "scripts/walkthrough-capture.mjs",
+    "scripts/walkthrough-capture.test.mjs",
+    "vitest.config.ts"
+  ]
+}

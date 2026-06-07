@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
     env: {
       PUBLIC_INSTANTDB_APP_ID: 'test-app-id',
     },
