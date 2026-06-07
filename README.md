@@ -134,6 +134,27 @@ you its teacher — there is no special account type; any signed-in user can cre
 one. A blank or whitespace-only title is rejected inline and creates nothing. The
 join code is a shareable bearer token for the (later) join-via-link flow.
 
+## Starting and ending a session
+
+A created `draft` session is no longer a dead end. From the post-create card,
+click **Open session** to reach its detail page (`/dashboard/sessions/[id]`,
+owner-only). There the owning teacher sees the session's current **status** and
+its **join** state, and can run it through its real lifecycle:
+
+- Click **Start session** — the status becomes `live` and the page shows that
+  joining is now **enabled** (the join code is presented as active), so students
+  would be able to join.
+- Click **End session** — the status becomes `ended` and live participation is
+  **closed** (join disabled).
+
+Only `draft → live` (start) and `live → ended` (end) are permitted (SPEC §6.2);
+any illegal or stale transition (e.g. ending a session that is not live) is
+rejected with an inline error and the status is left unchanged — no half-applied
+transition. Each transition appends a `SessionStarted` / `SessionEnded` event
+alongside the projection update in a single write, so a rejected transition
+leaves no partial state. (A real student join-via-link flow is a later cycle;
+this cycle ships the join-enablement gate, not the join itself.)
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
@@ -158,6 +179,17 @@ join code is a shareable bearer token for the (later) join-via-link flow.
   unset. Without admin env provisioned, the real `db.transact` write and the
   cycle-0003 permission rules have no runnable gate, so a regression there can
   pass CI as a false green until the credentials are wired in.
+- The session **lifecycle** dual-write, live status reflection, and join-gate
+  affordance are exercised end-to-end only by `e2e/session-lifecycle.spec.ts`,
+  which skips (loudly, but green) when `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID`
+  are unset. The pure lifecycle core (`assertLegalTransition`, the builders,
+  `isJoinEnabled`, the `applyEvent` fold) is fully unit-covered, but the live
+  `startSession`/`endSession` write and the cycle-0003 owner-only rule backstop
+  have no runnable gate until admin env is provisioned.
+- Both **Start** and **End** controls are shown on the detail page; clicking the
+  one that is not legal for the current status is intentionally rejected by the
+  transition guard with an inline error (it is how the failure path is observed),
+  rather than being hidden.
 - The generated **join code** carries a slight modulo bias: `generateJoinCode`
   reduces each random byte mod the 31-char alphabet (`256 % 31 = 8`), so indices
   0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the

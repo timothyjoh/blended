@@ -219,6 +219,30 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
         },
       }
     }
+    // Lifecycle fold cases (cycle 0006). Mirror `SessionCreated`'s defensive,
+    // no-mutation style: update only `status`, and tolerate an absent prior
+    // session (out-of-order / partial logs) by building a minimal session from
+    // the payload rather than throwing a spurious `UnknownEventTypeError`.
+    case 'SessionStarted': {
+      const p = event.payload as { id?: string }
+      const prev = projection.session
+      return {
+        ...projection,
+        session: prev
+          ? { ...prev, status: 'live' }
+          : { id: p.id ?? projection.sessionId, title: '', status: 'live', teacherId: '' },
+      }
+    }
+    case 'SessionEnded': {
+      const p = event.payload as { id?: string }
+      const prev = projection.session
+      return {
+        ...projection,
+        session: prev
+          ? { ...prev, status: 'ended' }
+          : { id: p.id ?? projection.sessionId, title: '', status: 'ended', teacherId: '' },
+      }
+    }
     case 'ParticipantJoined': {
       const p = event.payload as {
         participantId?: string

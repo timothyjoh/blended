@@ -132,3 +132,164 @@ export async function createSession(
   await write('SessionCreated', plan.meta, [buildTxn(plan.record)])
   return plan.record
 }
+
+// ---------------------------------------------------------------------------
+// Session lifecycle state machine (cycle 0006). Mirrors the create pure-core
+// split above: a single legal-transition table is the source of SPEC §6.2 truth,
+// pure builders (`buildSessionStart`/`buildSessionEnd`) totally validate the
+// transition AND owner identity AND a present sessionId and throw BEFORE
+// producing any plan, and thin async wrappers (`startSession`/`endSession`) route
+// the dual-write through `writeEvent`. `isJoinEnabled` is the sole, pure join
+// gate. A `draft` session is a dead end until started; starting opens the join
+// gate (true only while `live`), ending closes live participation.
+// ---------------------------------------------------------------------------
+
+export type SessionStatus = 'draft' | 'live' | 'ended' | 'archived'
+
+/**
+ * SPEC §6.2 — the ONLY transitions this cycle permits. Single source of truth:
+ * `draft → live` (start) and `live → ended` (end). `archived` and every other
+ * transition are deliberately absent (deferred), so they are rejected.
+ */
+const LEGAL_TRANSITIONS: Record<string, SessionStatus[]> = {
+  draft: ['live'],
+  live: ['ended'],
+}
+
+/**
+ * Throws on any transition not in the §6.2 table — including an unknown or
+ * missing `from` status. Total over hostile input: a `null`/`undefined`/unknown
+ * `from` has no allowed targets, so it always throws (never silently permits).
+ */
+export function assertLegalTransition(
+  from: string | null | undefined,
+  to: SessionStatus
+): void {
+  const allowed = from ? LEGAL_TRANSITIONS[from] : undefined
+  if (!allowed || !allowed.includes(to)) {
+    throw new Error(`Illegal session transition: ${from ?? '(none)'} → ${to}`)
+  }
+}
+
+/** Minimal session-like input the builders operate on — db-free, unit-testable. */
+export type SessionLike = { id: string; status: string; teacherId: string }
+
+export type BuildTransitionInput = {
+  session: SessionLike
+  actorId: string | null | undefined
+  // Injectable for deterministic tests; production uses the default.
+  now?: number
+}
+
+export type SessionTransitionPlan = {
+  sessionId: string
+  meta: WriteEventMeta
+  update: { status: SessionStatus; startedAt?: number; endedAt?: number }
+}
+
+/**
+ * Pure builder for `draft → live`. Totally validates BEFORE producing any plan:
+ * a present `sessionId`, owner identity (`actorId === session.teacherId`), and a
+ * legal transition from the session's CURRENT status. Fed the live status, the
+ * transition check is also the stale-tab / duplicate-event guard — re-issuing
+ * start on an already-`live` session throws rather than appending a second
+ * event. Stamps `startedAt` (SPEC §5.2). `sessionId === payload.id` so the event
+ * folds cleanly through `applyEvent`'s `SessionStarted` case.
+ */
+export function buildSessionStart(input: BuildTransitionInput): SessionTransitionPlan {
+  const { session, actorId } = input
+  if (!session?.id) throw new Error('startSession: a sessionId is required')
+  if (!actorId || actorId !== session.teacherId) {
+    throw new Error('startSession: only the owning teacher can start this session')
+  }
+  assertLegalTransition(session.status, 'live')
+  const startedAt = input.now ?? Date.now()
+  return {
+    sessionId: session.id,
+    meta: {
+      sessionId: session.id,
+      actor: { id: actorId, role: 'teacher' },
+      payload: { id: session.id, status: 'live', startedAt },
+    },
+    update: { status: 'live', startedAt },
+  }
+}
+
+/**
+ * Pure builder for `live → ended`. Same total validation as `buildSessionStart`
+ * (present id, owner identity, legal transition from current status); stamps
+ * `endedAt` (SPEC §5.2). Re-issuing end on an already-`ended` session throws.
+ */
+export function buildSessionEnd(input: BuildTransitionInput): SessionTransitionPlan {
+  const { session, actorId } = input
+  if (!session?.id) throw new Error('endSession: a sessionId is required')
+  if (!actorId || actorId !== session.teacherId) {
+    throw new Error('endSession: only the owning teacher can end this session')
+  }
+  assertLegalTransition(session.status, 'ended')
+  const endedAt = input.now ?? Date.now()
+  return {
+    sessionId: session.id,
+    meta: {
+      sessionId: session.id,
+      actor: { id: actorId, role: 'teacher' },
+      payload: { id: session.id, status: 'ended', endedAt },
+    },
+    update: { status: 'ended', endedAt },
+  }
+}
+
+export type TransitionDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (plan: SessionTransitionPlan) => ProjectionTxn
+}
+
+const defaultTransitionTxn = (plan: SessionTransitionPlan): ProjectionTxn =>
+  db.tx.sessions[plan.sessionId].update(plan.update)
+
+/**
+ * Thin wrapper: builds the start plan (sync-throws on illegal transition,
+ * non-owner actor, or missing id — writing nothing), then dual-writes the
+ * `SessionStarted` envelope + `sessions` projection update in ONE `writeEvent`
+ * transaction. Because the append and projection share that transaction, a
+ * rejected start leaves no partial state (no orphan event, no half-changed
+ * status). NOT idempotent by design — each call appends a fresh event; retry
+ * safety comes from the transition guard fed the CURRENT status, which rejects a
+ * stale re-issue rather than appending a duplicate. The rejection propagates to
+ * the caller and is never swallowed. `deps` are injectable for unit tests.
+ */
+export async function startSession(
+  input: BuildTransitionInput,
+  deps: TransitionDeps = {}
+): Promise<SessionTransitionPlan> {
+  const plan = buildSessionStart(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultTransitionTxn
+  await write('SessionStarted', plan.meta, [buildTxn(plan)])
+  return plan
+}
+
+/**
+ * Thin wrapper for `live → ended`: same dual-write/atomicity/non-idempotency
+ * contract as {@link startSession}, writing the `SessionEnded` envelope. A
+ * rejected end leaves no partial state; the rejection propagates, never swallowed.
+ */
+export async function endSession(
+  input: BuildTransitionInput,
+  deps: TransitionDeps = {}
+): Promise<SessionTransitionPlan> {
+  const plan = buildSessionEnd(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultTransitionTxn
+  await write('SessionEnded', plan.meta, [buildTxn(plan)])
+  return plan
+}
+
+/**
+ * The sanctioned join gate. Pure and total: `true` iff the session is `live`.
+ * `false` for `draft`/`ended`/`archived`, an unknown status, or a null/absent
+ * session — so the detail UI's join affordance can never drift from status.
+ */
+export function isJoinEnabled(session: { status?: string } | null | undefined): boolean {
+  return !!session && session.status === 'live'
+}

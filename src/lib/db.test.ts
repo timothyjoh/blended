@@ -49,6 +49,22 @@ const participantJoined: EventLike = {
   payload: { participantId: 'p1', userId: 'u1', role: 'student', username: 'ada' },
 }
 
+const sessionStarted: EventLike = {
+  id: 'evt-3',
+  type: 'SessionStarted',
+  occurredAt: 3000,
+  receivedAt: 3000,
+  payload: { id: 's1', status: 'live', startedAt: 3000 },
+}
+
+const sessionEnded: EventLike = {
+  id: 'evt-4',
+  type: 'SessionEnded',
+  occurredAt: 4000,
+  receivedAt: 4000,
+  payload: { id: 's1', status: 'ended', endedAt: 4000 },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -88,6 +104,41 @@ describe('applyEvent', () => {
     expect(base.session).toBeNull()
   })
 
+  it('folds SessionStarted into status === live, preserving other fields', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const result = applyEvent(created, sessionStarted)
+    expect(result.session).toEqual({
+      id: 's1',
+      title: 'Algebra',
+      status: 'live',
+      teacherId: 'teacher-1',
+    })
+  })
+
+  it('folds SessionEnded into status === ended', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const result = applyEvent(created, sessionEnded)
+    expect(result.session?.status).toBe('ended')
+  })
+
+  it('does not throw on SessionStarted/SessionEnded (the types are known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), sessionStarted)).not.toThrow()
+    expect(() => applyEvent(emptyProjection('s1'), sessionEnded)).not.toThrow()
+  })
+
+  it('folds a lifecycle event with no prior session into a minimal session', () => {
+    // Out-of-order / partial log: a SessionStarted reaching an empty projection
+    // builds a minimal session at the event status rather than throwing.
+    const result = applyEvent(emptyProjection('s1'), sessionStarted)
+    expect(result.session).toEqual({ id: 's1', title: '', status: 'live', teacherId: '' })
+  })
+
+  it('does not mutate the input projection when folding a lifecycle event', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    applyEvent(created, sessionStarted)
+    expect(created.session?.status).toBe('draft')
+  })
+
   it('does NOT fold an identity-scope UserSignedIn event into a session', () => {
     // Locks the cycle-0002 decision: identity events (written under the
     // IDENTITY_SCOPE sentinel by useAuth) live outside the session fold. If
@@ -113,6 +164,19 @@ describe('rebuildSessionProjection determinism', () => {
     expect(outOfOrder).toEqual(inOrder)
     expect(inOrder.session?.title).toBe('Algebra')
     expect(inOrder.participants.p1.username).toBe('ada')
+  })
+
+  it('rebuilds the full lifecycle to status === ended', () => {
+    const result = rebuildSessionProjection('s1', [sessionCreated, sessionStarted, sessionEnded])
+    expect(result.session?.status).toBe('ended')
+    expect(result.session?.title).toBe('Algebra')
+  })
+
+  it('folds the full lifecycle deterministically regardless of input order', () => {
+    const shuffled = rebuildSessionProjection('s1', [sessionEnded, sessionCreated, sessionStarted])
+    const inOrder = rebuildSessionProjection('s1', [sessionCreated, sessionStarted, sessionEnded])
+    expect(shuffled).toEqual(inOrder)
+    expect(shuffled.session?.status).toBe('ended')
   })
 
   it('orders by occurredAt, then receivedAt, then id (§17.1)', () => {

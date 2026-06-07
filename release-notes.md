@@ -1,5 +1,29 @@
 # Release Notes
 
+## Cycle 0006 — Teacher starts / ends a session (lifecycle)
+
+- **New: run a session through its lifecycle.** From a session's detail page
+  (`/dashboard/sessions/[id]`, owner-only), the teacher can click **Start** to
+  move a `draft` session to `live` — opening the join gate (the join code is
+  presented as active) — and **End** to move a `live` session to `ended`, closing
+  live participation. Reached from the post-create card's new **Open session**
+  link. (`src/lib/sessions.ts`, `src/components/SessionLifecycle.tsx`,
+  `src/pages/dashboard/sessions/[id].astro`, `src/components/NewSession.tsx`)
+- **Legal-transition guard (SPEC §6.2).** Only `draft → live` and `live → ended`
+  are permitted; any illegal or stale transition is rejected inline with no
+  half-applied state and the displayed status unchanged. Transitions route
+  exclusively through `writeEvent('SessionStarted'/'SessionEnded', …)`, appending
+  the event and updating the `sessions` projection (status + `startedAt`/`endedAt`)
+  in one transaction; `applyEvent` folds the two new events so the log still
+  rebuilds the projection. `isJoinEnabled` is the sole join gate (true only when
+  `live`).
+- **Reused testids for downstream cycles:** `session-start`, `session-end`,
+  `session-status`, `session-join-state`, `session-lifecycle-error`,
+  `created-session-link`.
+- New unit coverage in `src/lib/sessions.test.ts` / `src/lib/db.test.ts` and a new
+  e2e suite `e2e/session-lifecycle.spec.ts` (reuses `queryAdmin`; skips loudly
+  when admin env is unset). No new env/config keys.
+
 ## Cycle 0005 — Teacher creates a session (draft)
 
 - **New: create a session from the dashboard.** A signed-in user can open
