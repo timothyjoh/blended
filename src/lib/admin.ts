@@ -81,3 +81,99 @@ export function decideBootstrap(input: {
   }
   return { elevate: true, adminLevel: ADMIN_LEVEL_UBER }
 }
+
+// ---------------------------------------------------------------------------
+// Admin console aggregation (cycle 0020, ADR-0003). The pure, db-free seam the
+// `AdminSessionList` island folds its three unscoped live queries through. Kept
+// here (not in the island) so the join logic unit-tests without a hydrated
+// client. `sessionDisplayTitle` is the only cross-module dependency — reused
+// verbatim so the console's title fallback matches the dashboard's.
+// ---------------------------------------------------------------------------
+
+import { sessionDisplayTitle } from './sessions'
+
+/** Explicit "no value" display used by the admin console for absent resource/url. */
+export const ADMIN_VALUE_NONE = '(none)' as const
+
+/** Minimal session-projection subset the admin console reads (never email). */
+export type AdminSessionInput = {
+  id: string
+  title?: string | null
+  status?: string | null
+  teacherId?: string | null
+  createdAt?: number | null
+  activeResourceId?: string | null
+  currentUrl?: string | null
+}
+
+/** Minimal participant/question subset — only `sessionId` (+ `status` for questions) matter. */
+export type AdminSessionChildInput = { sessionId?: string | null; status?: string | null }
+
+/** A fully-resolved admin console row — every field non-throwing and display-ready. */
+export type AdminSessionRow = {
+  id: string
+  title: string
+  status: string | null
+  teacherId: string | null
+  participantCount: number
+  activeResourceId: string | null
+  currentUrl: string | null
+  openQuestionCount: number
+}
+
+/** Blank/whitespace/absent → null (so the island renders an explicit "none"). */
+function normalizeOptional(v: string | null | undefined): string | null {
+  const t = (v ?? '').trim()
+  return t === '' ? null : t
+}
+
+/**
+ * TOTAL join of the three unscoped projections into ordered admin rows. Never
+ * throws: a session with no children → counts 0; a participant/question whose
+ * `sessionId` matches no session is ignored; absent optional fields collapse to
+ * null/0/fallback. Open-question = `status !== 'answered'`. Order: createdAt asc,
+ * id tie-break (deterministic, no server index). No email is read or emitted.
+ */
+export function buildAdminSessionRows(
+  sessions: readonly AdminSessionInput[] | null | undefined,
+  participants: readonly AdminSessionChildInput[] | null | undefined,
+  questions: readonly AdminSessionChildInput[] | null | undefined
+): AdminSessionRow[] {
+  const knownSessions = sessions ?? []
+  const known = new Set(knownSessions.map((s) => s.id))
+
+  const pCounts = new Map<string, number>()
+  for (const p of participants ?? []) {
+    const sid = p?.sessionId
+    if (sid && known.has(sid)) pCounts.set(sid, (pCounts.get(sid) ?? 0) + 1)
+  }
+
+  const qCounts = new Map<string, number>()
+  for (const q of questions ?? []) {
+    const sid = q?.sessionId
+    if (sid && known.has(sid) && q?.status !== 'answered')
+      qCounts.set(sid, (qCounts.get(sid) ?? 0) + 1)
+  }
+
+  // Fold createdAt into an intermediate tuple so the sort is O(n log n) — never
+  // a re-`find` inside the comparator.
+  return knownSessions
+    .map((s) => ({
+      createdAt: s.createdAt ?? 0,
+      row: {
+        id: s.id,
+        title: sessionDisplayTitle(s.title),
+        status: s.status ?? null,
+        teacherId: s.teacherId ?? null,
+        participantCount: pCounts.get(s.id) ?? 0,
+        activeResourceId: normalizeOptional(s.activeResourceId),
+        currentUrl: normalizeOptional(s.currentUrl),
+        openQuestionCount: qCounts.get(s.id) ?? 0,
+      } satisfies AdminSessionRow,
+    }))
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
+      return a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0
+    })
+    .map((e) => e.row)
+}

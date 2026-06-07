@@ -384,6 +384,21 @@ e2e suite is `e2e/admin-route.spec.ts` (skips loudly without admin env). **Defer
 an existing admin promoting another user, the admin observability/event-replay
 screens, and organization/group-scoped admins.
 
+**Live session console (cycle 0020).** `/admin` is no longer an empty placeholder:
+an uber admin now sees a **read-only, realtime, system-wide session console** —
+**every** session in the system, across all owners and all statuses
+(`draft`/`live`/`ended`/`archived`), each row showing its status, owning teacher
+id, participant count, active resource, current URL, and open-question count. When
+a student joins or a teacher activates a resource in another browser, the matching
+row's counts and active-resource cell update **without a reload**. It is strictly
+read-only internal observability — no session state can be changed from the console,
+and **no teacher or student email is ever shown** (the owner is identified by id
+only). Each row links to `/admin/sessions/:id`, the drill-in target for the
+event-log inspector that lands in a later cycle. No new env keys, schema, or
+permission push this cycle; the e2e suite is `e2e/admin-console.spec.ts` (skips
+loudly without admin env). **Deferred:** server-side indexing/pagination of the
+unscoped system-wide queries (a full scan, accepted at MVP scale).
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
@@ -482,6 +497,15 @@ screens, and organization/group-scoped admins.
   (`buildResourceActivate`, the `ResourceActivated` fold, `rebuildSessionProjection`)
   is fully unit-covered, but the live `activateResource` write and the cycle-0003
   owner-only-write backstop have no runnable gate until admin env is provisioned.
+- **The admin session console runs unscoped full-table scans with no index or
+  pagination.** As of cycle 0020 `AdminSessionList` issues three unscoped live
+  `db.useQuery` reads over the entire `sessions`, `participants`, and `questions`
+  projections on every `/admin` load and folds them client-side via
+  `buildAdminSessionRows`. The work grows linearly with total platform activity,
+  not with what the admin views, and there is no bound on result size — a real
+  scaling cliff once session volume becomes non-trivial. It is accepted at MVP
+  scale; server-side scoping/pagination (or a precomputed admin projection) for the
+  three reads remains a later cycle.
 
 ## Resources
 
