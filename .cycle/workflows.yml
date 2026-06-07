@@ -3,6 +3,7 @@
 engine:
   max_consecutive_failures: 2
   base_branch: main
+  walkthrough_hook_timeout_ms: 600000
   rate_limit_backoff_ms: 3600000
   max_rate_limit_retries: 24
   step_timeout_ms: 2700000
