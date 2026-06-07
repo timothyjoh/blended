@@ -35,6 +35,20 @@ export function freshEmail(): string {
 }
 
 /**
+ * e2e-only Node-side admin read for observability assertions (the dual-write is
+ * only fully observable against the live app). Throws — the failure surfaces in
+ * the test, never swallowed — matching `mintCode`'s convention. Read-only, so
+ * re-run safe. Requires `adminAvailable()`; callers gate with `test.skip`.
+ */
+export async function queryAdmin(query: Record<string, unknown>): Promise<any> {
+  const admin = init({
+    appId: process.env.PUBLIC_INSTANTDB_APP_ID as string,
+    adminToken: process.env.INSTANT_ADMIN_TOKEN as string,
+  })
+  return admin.query(query as any)
+}
+
+/**
  * Drive the real `/login` island to a signed-in state for `email`, replacing
  * only code RETRIEVAL with the admin-minted code (mirrors the inline helper in
  * auth.spec.ts). Shared so every spec that needs an authenticated context signs

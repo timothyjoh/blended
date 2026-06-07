@@ -1,5 +1,25 @@
 # Release Notes
 
+## Cycle 0005 — Teacher creates a session (draft)
+
+- **New: create a session from the dashboard.** A signed-in user can open
+  `/dashboard`, click **New session**, enter a title, and create a real `draft`
+  session they own — reflected back on screen immediately with its status and a
+  generated, unguessable **join code**. Creating a session is what makes a user
+  its teacher (session-scoped role, no account type). (`src/lib/sessions.ts`,
+  `src/components/NewSession.tsx`, `src/pages/dashboard/index.astro`)
+- **Single write path preserved.** Creation routes through
+  `writeEvent('SessionCreated', …)`, so the event envelope and the `sessions`
+  projection commit in one transaction; a rejected create leaves no partial
+  state. A blank/whitespace title is rejected inline and writes nothing.
+- **Reused testids for downstream cycles:** `new-session-open`,
+  `new-session-title`, `new-session-submit`, `new-session-error`,
+  `created-session`, `created-session-title`, `created-session-status`,
+  `created-session-joincode`.
+- New unit suite `src/lib/sessions.test.ts` and e2e suite
+  `e2e/create-session.spec.ts` (adds the `queryAdmin` admin-read helper; reuses
+  `INSTANT_ADMIN_TOKEN`, skips loudly when unset). No new env vars.
+
 ## Cycle 0004 — Route guarding + role-aware routing
 
 - **New: client-side route guard.** Protected routes now require sign-in. A

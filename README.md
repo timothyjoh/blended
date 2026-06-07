@@ -124,6 +124,16 @@ discarded and falls back to `/dashboard`. The route-guard e2e suite
 (`e2e/route-guarding.spec.ts`) reuses `INSTANT_ADMIN_TOKEN` and skips loudly
 when it is unset.
 
+## Creating a session
+
+Signed-in users can now create a session from the dashboard. On `/dashboard`,
+click **New session**, enter a title, and submit — a real session is created in
+`draft` status, owned by you, with a generated, hard-to-guess **join code** shown
+back on screen immediately (no navigation away). Creating a session is what makes
+you its teacher — there is no special account type; any signed-in user can create
+one. A blank or whitespace-only title is rejected inline and creates nothing. The
+join code is a shareable bearer token for the (later) join-via-link flow.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
@@ -142,6 +152,17 @@ when it is unset.
   that hydrates and then decides, so there is no server/middleware protection
   and the guarded content is gated only after `useAuth` resolves in the browser.
   Until that point the guard shows `route-guard-loading` rather than redirecting.
+- The session-creation **dual-write and observability path** is exercised only
+  by the `e2e/create-session.spec.ts` happy-path/observability specs, which skip
+  (loudly, but green) when `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are
+  unset. Without admin env provisioned, the real `db.transact` write and the
+  cycle-0003 permission rules have no runnable gate, so a regression there can
+  pass CI as a false green until the credentials are wired in.
+- The generated **join code** carries a slight modulo bias: `generateJoinCode`
+  reduces each random byte mod the 31-char alphabet (`256 % 31 = 8`), so indices
+  0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the
+  code stays unguessable (~49 bits); rejection sampling would make the
+  distribution provably uniform if a future cycle needs it.
 
 ## Resources
 

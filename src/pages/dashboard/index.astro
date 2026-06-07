@@ -1,18 +1,22 @@
 ---
 import Layout from '@/layouts/Layout.astro'
 import RouteGuard from '@/components/RouteGuard'
+import NewSession from '@/components/NewSession'
 
-// Minimal auth-only protected placeholder (cycle 0004). The real dashboard is a
-// future cycle — this carries only an identifying shell behind the guard so the
-// "signed out → /login?next=…" bounce and "signed in → render" landing are
-// observable end-to-end. `client:only="react"` because the guard reads
-// client-held auth state.
+// Protected dashboard. The route guard (cycle 0004) gates the shell; the
+// `NewSession` island (cycle 0005) is the first product surface that durably
+// changes session state — a signed-in user creates a `draft` session they own.
+// `NewSession` is a nested `client:only="react"` island so it hydrates only when
+// `RouteGuard` renders its children (authenticated), exactly as `dashboard-root`
+// is already gated. `client:only="react"` because the guard reads client-held
+// auth state.
 ---
 
 <Layout title="Dashboard — Blended">
   <div class="mx-auto mt-12 w-full max-w-2xl px-4">
     <RouteGuard client:only="react">
       <h1 data-testid="dashboard-root" class="text-2xl font-semibold">Dashboard</h1>
+      <NewSession client:only="react" />
     </RouteGuard>
   </div>
 </Layout>

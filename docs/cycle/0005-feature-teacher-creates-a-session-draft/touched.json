@@ -1,0 +1,12 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "e2e/support/auth.ts",
+    "release-notes.md",
+    "src/components/NewSession.tsx",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts",
+    "src/pages/dashboard/index.astro"
+  ]
+}
