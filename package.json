@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install --with-deps chromium"
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "perms:push": "node scripts/push-perms.mjs"
   },
   "dependencies": {
     "@ariakit/react": "^0.4.29",

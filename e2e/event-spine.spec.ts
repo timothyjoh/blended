@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 
 // Each test uses a unique disposable sessionId so concurrent/repeat runs against
 // the shared Instant app never pollute one another's assertions. InstantDB
@@ -6,6 +7,13 @@ import { test, expect, type Page } from '@playwright/test'
 function freshSessionId(): string {
   return crypto.randomUUID()
 }
+
+// Under the cycle-0003 owner-only `sessions` rule the harness must write as an
+// authenticated teacher, so the create/realtime tests require admin code minting
+// and skip loudly without it. The invalid-write test stays ungated — it asserts
+// the SYNCHRONOUS `writeEvent` validation, which throws before any transaction
+// and exercises no permission rule.
+const NEEDS_AUTH = 'INSTANT_ADMIN_TOKEN unset — harness writes require an authenticated owner under perms'
 
 async function gotoHarness(page: Page, sessionId: string) {
   await page.goto(`/dev/event-spine?sessionId=${sessionId}`)
@@ -17,7 +25,9 @@ async function gotoHarness(page: Page, sessionId: string) {
 
 test.describe('event spine dual-write harness', () => {
   test('writeEvent twice yields exactly two events and two projection rows', async ({ page }) => {
+    test.skip(!adminAvailable(), NEEDS_AUTH)
     const sessionId = freshSessionId()
+    await signInViaUi(page, freshEmail())
     await gotoHarness(page, sessionId)
 
     await expect(page.getByTestId('event-count')).toHaveText('0')
@@ -33,6 +43,7 @@ test.describe('event spine dual-write harness', () => {
   })
 
   test('realtime: a write in context A appears in context B without reload', async ({ browser }) => {
+    test.skip(!adminAvailable(), NEEDS_AUTH)
     const sessionId = freshSessionId()
 
     const ctxA = await browser.newContext()
@@ -40,6 +51,9 @@ test.describe('event spine dual-write harness', () => {
     const pageA = await ctxA.newPage()
     const pageB = await ctxB.newPage()
 
+    // Only the WRITER (A) must be authenticated; reads are open so the observer
+    // (B) stays unauthenticated and still sees the realtime push.
+    await signInViaUi(pageA, freshEmail())
     await gotoHarness(pageA, sessionId)
     await gotoHarness(pageB, sessionId)
 

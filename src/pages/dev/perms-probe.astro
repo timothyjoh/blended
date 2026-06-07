@@ -1,0 +1,29 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import PermsProbe from '@/components/PermsProbe'
+
+// Dev-only verification surface for the cycle-0003 permission rules. Issues raw
+// client reads/writes so the e2e spec can observe the data layer's verdict.
+// Disabled in production builds so it never becomes a shipped product route.
+const isProd = import.meta.env.PROD
+---
+
+<Layout title="Perms Probe — Dev Harness">
+	<div id="container">
+		<h1>Permissions Probe — Dev Harness</h1>
+		{
+			isProd ? (
+				<p data-testid="dev-disabled">Dev harness disabled in production.</p>
+			) : (
+				<PermsProbe client:only="react" />
+			)
+		}
+	</div>
+</Layout>
+
+<style>
+	#container {
+		width: 60%;
+		margin: 3rem auto 0;
+	}
+</style>

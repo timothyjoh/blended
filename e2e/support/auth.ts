@@ -1,4 +1,5 @@
 import { init } from '@instantdb/admin'
+import { expect, type Page } from '@playwright/test'
 
 // ---------------------------------------------------------------------------
 // Deterministic magic-code seam for the auth e2e suite. InstantDB ships no
@@ -26,4 +27,31 @@ export async function mintCode(email: string): Promise<string> {
   })
   const { code } = await admin.auth.generateMagicCode(email)
   return code
+}
+
+/** A fresh disposable email so reruns against the shared Instant app never collide. */
+export function freshEmail(): string {
+  return `e2e+${crypto.randomUUID()}@blended.test`
+}
+
+/**
+ * Drive the real `/login` island to a signed-in state for `email`, replacing
+ * only code RETRIEVAL with the admin-minted code (mirrors the inline helper in
+ * auth.spec.ts). Shared so every spec that needs an authenticated context signs
+ * in the same way. Each assertion failure surfaces in the test — never swallowed.
+ * Requires `adminAvailable()`; callers gate with `test.skip(!adminAvailable(), …)`.
+ */
+export async function signInViaUi(page: Page, email: string): Promise<void> {
+  await page.goto('/login')
+  // `client:only="react"` island — cold-start hydration can exceed Playwright's
+  // 5s default, so give the first assertion a 15s budget.
+  await expect(page.getByTestId('auth-email-input')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auth-email-input').fill(email)
+  await page.getByTestId('auth-send').click()
+  await expect(page.getByTestId('auth-code-input')).toBeVisible({ timeout: 15_000 })
+  // Mint AFTER send so the admin code is the latest-valid one.
+  const code = await mintCode(email)
+  await page.getByTestId('auth-code-input').fill(code)
+  await page.getByTestId('auth-verify').click()
+  await expect(page.getByTestId('auth-signed-in')).toBeVisible({ timeout: 15_000 })
 }

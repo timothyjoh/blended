@@ -3,6 +3,7 @@
     ".env.example",
     "AGENTS.md",
     "README.md",
+    "docs/cycle/0002-feature-email-magic-code-authentication-shared-f/BUILD.md",
     "package-lock.json",
     "package.json",
     "src/components/AuthGate.tsx",

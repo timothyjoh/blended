@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { adminAvailable, mintCode } from './support/auth'
+import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 
 // The auth flow drives the REAL sign-in island against real InstantDB auth on
 // the port-4399 dev server. Only code RETRIEVAL is replaced by the admin-SDK
@@ -12,12 +12,6 @@ test.describe('email magic-code authentication', () => {
     'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — auth e2e requires admin code minting'
   )
 
-  // Unique disposable email per test so reruns against the shared Instant app
-  // never collide.
-  function freshEmail(): string {
-    return `e2e+${crypto.randomUUID()}@blended.test`
-  }
-
   async function gotoLogin(page: Page) {
     await page.goto('/login')
     // `client:only="react"` island — cold-start hydration can exceed Playwright's
@@ -25,17 +19,10 @@ test.describe('email magic-code authentication', () => {
     await expect(page.getByTestId('auth-email-input')).toBeVisible({ timeout: 15_000 })
   }
 
-  async function signIn(page: Page, email: string) {
-    await gotoLogin(page)
-    await page.getByTestId('auth-email-input').fill(email)
-    await page.getByTestId('auth-send').click()
-    await expect(page.getByTestId('auth-code-input')).toBeVisible({ timeout: 15_000 })
-    // Mint AFTER send so the admin code is the latest-valid one.
-    const code = await mintCode(email)
-    await page.getByTestId('auth-code-input').fill(code)
-    await page.getByTestId('auth-verify').click()
-    await expect(page.getByTestId('auth-signed-in')).toBeVisible({ timeout: 15_000 })
-  }
+  // The full email → code → signed-in drive is the shared `signInViaUi` seam
+  // (e2e/support/auth.ts), reused by the permissions and event-spine specs so
+  // the sign-in flow never diverges across suites.
+  const signIn = signInViaUi
 
   test('happy path: email → code → signed-in view shows derived username', async ({ page }) => {
     const email = freshEmail()

@@ -41,6 +41,7 @@ All commands are run from the root of the project, from a terminal:
 | `npm run test`            | Run Vitest unit tests                            |
 | `npm run test:coverage`   | Run unit tests with a coverage report            |
 | `npm run test:e2e`        | Run Playwright e2e (after `test:e2e:install`)    |
+| `npm run perms:push`      | Push InstantDB permission rules (fail-loud)      |
 
 ## Data Layer & Event Spine
 
@@ -56,6 +57,27 @@ Before deploying against an Instant app with schema enforcement enabled, push
 the schema once with `npx instant-cli push schema` — otherwise every
 `writeEvent()` transaction is rejected (the rejection surfaces to the caller, it
 is not silent).
+
+### Permission rules
+
+Security invariants are enforced at the data layer, not just in the UI:
+private student email is readable only by its owner, and only the owning teacher
+may mutate a session's state (`sessions` / `sessionResources`), while any
+authenticated participant may append to the `sessionEvents` log. The rules live
+in `src/lib/perms.ts` (root `instant.perms.ts` is the CLI adapter). After
+`push schema`, push them with **`npm run perms:push`** — a fail-loud wrapper
+around `npx instant-cli push perms` that exits non-zero with a clear message if
+the app id or `instant-cli` auth is missing, and is safe to re-run (declarative).
+No new required environment variable is introduced (the e2e-only
+`INSTANT_ADMIN_TOKEN`, used by the permissions Playwright suite, is already
+documented below).
+
+> **Not yet live.** These rules ship in the repo but are **inert until an
+> operator pushes them**. Until `npx instant-cli push schema` and
+> `npm run perms:push` have been run against the app (and `e2e/permissions.spec.ts`
+> has been run with `INSTANT_ADMIN_TOKEN` set — it skips loudly otherwise),
+> email privacy and session-write authorization are enforced by convention only,
+> exactly as before this cycle.
 
 Set `PUBLIC_INSTANTDB_APP_ID` in `.env` (copy `.env.example`) — it is the only
 required environment variable for the app, used by the Todo demo, the event

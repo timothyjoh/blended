@@ -59,6 +59,16 @@ export const schema = i.schema({
     }),
     sessionResources: i.entity({
       sessionId: i.string().indexed(),
+      // Denormalized owner = parent session's teacher (auth id). Mirrors
+      // `sessions.teacherId` and stays useful for queries, BUT it is NOT the
+      // basis of the write-permission rule: a client supplies this field on
+      // create, so trusting it admitted resource-injection (a student could set
+      // `teacherId` to their own id and `sessionId` to a victim's session). The
+      // permission rule instead checks ownership against the LINKED parent
+      // session (`data.ref('session.teacherId')`, see perms.ts + the `session`
+      // link below), which the client cannot forge. Resource creators MUST set
+      // both this field and the `session` link to the parent session.
+      teacherId: i.string().indexed(),
       url: i.string(),
       title: i.string(),
       type: i.string(),
@@ -73,8 +83,10 @@ export const schema = i.schema({
       userId: i.string(),
       role: i.string<'teacher' | 'student' | 'assistant' | 'ai'>(),
       username: i.string(),
-      // private (SPEC §5)
-      email: i.string().optional(),
+      // NOTE: no `email` field. The canonical private email lives ONLY on the
+      // own-row-locked `users` namespace (cycle 0003). InstantDB view rules are
+      // row-level, not column-level, so a participant row that other students
+      // can read MUST carry no email at all — privacy is structural (SPEC §16.1).
       joinedAt: i.number(),
       lastSeenAt: i.number(),
       chatStatus: i.string(),
@@ -114,6 +126,17 @@ export const schema = i.schema({
       // anonymous — no actor stored on the projection row (CONTEXT.md).
       createdAt: i.number(),
     }),
+  },
+  links: {
+    // Cycle 0003: make `sessionResources` ownership checkable against the REAL
+    // parent session (not a client-supplied field) so the create/update/delete
+    // permission rule can require `auth.id in data.ref('session.teacherId')`.
+    // The forward `session` label is what that rule traverses; the reverse
+    // `resources` label lets a session enumerate its resource rows.
+    sessionResourceSession: {
+      forward: { on: 'sessionResources', has: 'one', label: 'session' },
+      reverse: { on: 'sessions', has: 'many', label: 'resources' },
+    },
   },
 })
 

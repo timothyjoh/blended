@@ -1,0 +1,19 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "e2e/auth.spec.ts",
+    "e2e/event-spine.spec.ts",
+    "e2e/support/auth.ts",
+    "package.json",
+    "scripts/push-perms.mjs",
+    "src/components/EventSpineHarness.tsx",
+    "src/components/PermsProbe.tsx",
+    "src/lib/db.ts",
+    "src/lib/perms.test.ts",
+    "src/lib/perms.ts",
+    "src/lib/pushPerms.test.ts",
+    "src/lib/pushPerms.ts",
+    "src/pages/dev/perms-probe.astro"
+  ]
+}

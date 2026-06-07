@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { db, writeEvent, id } from '@/lib/db'
+import { useAuth } from '@/lib/useAuth'
 
 // ---------------------------------------------------------------------------
 // Dev-only scratch harness — NOT a product surface. It exercises the dual-write
@@ -22,6 +23,11 @@ function resolveSessionId(): string {
 export default function EventSpineHarness() {
   const sessionId = useMemo(resolveSessionId, [])
   const [error, setError] = useState<string | null>(null)
+  // The owner-only `sessions` permission rule (cycle 0003) rejects an
+  // unauthenticated write, so the harness writes as the signed-in user: the
+  // session/participant owner and event actor is `user.id`, not a literal id.
+  const { user } = useAuth()
+  const actorId = user?.id ?? null
 
   const { isLoading, error: queryError, data } = db.useQuery({
     sessionEvents: { $: { where: { sessionId } } },
@@ -31,19 +37,23 @@ export default function EventSpineHarness() {
 
   function createSession() {
     setError(null)
+    if (!actorId) {
+      surface(new Error('Sign in first — the owner-only sessions rule requires an authenticated teacher'))
+      return
+    }
     try {
       writeEvent(
         'SessionCreated',
         {
           sessionId,
-          actor: { id: 'dev-teacher', role: 'teacher' },
-          payload: { id: sessionId, title: 'Dev Session', teacherId: 'dev-teacher' },
+          actor: { id: actorId, role: 'teacher' },
+          payload: { id: sessionId, title: 'Dev Session', teacherId: actorId },
         },
         [
           db.tx.sessions[sessionId].update({
             title: 'Dev Session',
             status: 'draft',
-            teacherId: 'dev-teacher',
+            teacherId: actorId,
             joinCode: sessionId,
             createdAt: Date.now(),
             interactionMode: 'none',
@@ -57,19 +67,23 @@ export default function EventSpineHarness() {
 
   function joinParticipant() {
     setError(null)
+    if (!actorId) {
+      surface(new Error('Sign in first — participant writes require an authenticated user'))
+      return
+    }
     const participantId = id()
     try {
       writeEvent(
         'ParticipantJoined',
         {
           sessionId,
-          actor: { id: 'dev-student', role: 'student' },
-          payload: { participantId, userId: 'dev-student', role: 'student', username: 'student' },
+          actor: { id: actorId, role: 'student' },
+          payload: { participantId, userId: actorId, role: 'student', username: 'student' },
         },
         [
           db.tx.participants[participantId].update({
             sessionId,
-            userId: 'dev-student',
+            userId: actorId,
             role: 'student',
             username: 'student',
             joinedAt: Date.now(),
@@ -118,11 +132,27 @@ export default function EventSpineHarness() {
       <p>
         Session: <code data-testid="session-id">{sessionId}</code>
       </p>
+      {!actorId && (
+        <p data-testid="harness-needs-auth" style={{ color: 'darkorange' }}>
+          Sign in at <code>/login</code> first — owner-only session rules require an authenticated
+          teacher. (The invalid-write button still works; it throws before any transaction.)
+        </p>
+      )}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button data-testid="btn-create-session" onClick={createSession} className="btn">
+        <button
+          data-testid="btn-create-session"
+          onClick={createSession}
+          className="btn"
+          disabled={!actorId}
+        >
           Create session
         </button>
-        <button data-testid="btn-join-participant" onClick={joinParticipant} className="btn">
+        <button
+          data-testid="btn-join-participant"
+          onClick={joinParticipant}
+          className="btn"
+          disabled={!actorId}
+        >
           Join participant
         </button>
         <button data-testid="btn-invalid-write" onClick={invalidWrite} className="btn">

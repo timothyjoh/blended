@@ -7,6 +7,10 @@ depends_on:
 triaged_at: 2026-06-06T21:51:44.121Z
 source: triage
 priority: critical
+noop_at: 2026-06-06T23:33:41.576Z
+noop_reason: already-satisfied
+noop_step: build
+last_cycle_id: "0002"
 ---
 ## Problem
 
