@@ -54,6 +54,21 @@ plan.
    (queue/commit/init flows), make it idempotent.
 7. **Update docs as part of "done."** CLAUDE.md / AGENTS.md / README.md
    updates required by SPEC are part of this step.
+8. **Build the walkthrough script.** Implement the walkthrough PLAN.md
+   defined in its `## Walkthrough Plan` section as
+   `docs/cycle/<cycle_id>-<workflow>-<slug>/walkthrough.mjs` (the engine's
+   `$CYCLE_ARTIFACT_DIR/walkthrough.mjs`). It MUST
+   `export default async ({ page, baseURL, capture }) => { … }` — the shape
+   `scripts/walkthrough-capture.mjs` invokes — drive the real new
+   routes/flows from the plan, and call `capture("01-…")`, `capture("02-…")`,
+   … at each planned point so the screenshots + video show THIS cycle's
+   functionality, not the home page. Honor the plan's preconditions
+   (test-code auth, seeded data) and wait on explicit elements (never
+   `networkidle` — InstantDB keeps the network busy). Keep it runnable under a
+   bare `node` (deps: `playwright` + node built-ins only; no project `.ts`
+   imports). If the plan declared no observable UI this cycle, capture
+   whatever IS observable and note the limitation — do not rely on the
+   home-page fallback.
 
 ## Quality Gates Before You Finish
 
@@ -70,6 +85,10 @@ plan.
       or architecture decisions.
 - [ ] README.md updated with any user-facing changes.
 - [ ] No compiler / linter warnings.
+- [ ] Walkthrough script authored at
+      `docs/cycle/<cycle_id>-<workflow>-<slug>/walkthrough.mjs` per PLAN.md's
+      `## Walkthrough Plan`, driving the new functionality with multiple named
+      capture points (not the home-page fallback).
 
 ## Important Rules
 

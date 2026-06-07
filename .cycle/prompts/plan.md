@@ -39,6 +39,27 @@ Break the cycle into vertical slices. Each slice:
 - Builds on the previous slice.
 - Includes both implementation AND tests.
 
+### Step 3b: Plan the Walkthrough
+
+Define how this cycle's NEW functionality will be demonstrated as a visual
+walkthrough. The `walkthrough_capture` step runs a per-cycle Playwright
+scenario at `$CYCLE_ARTIFACT_DIR/walkthrough.mjs`
+(`docs/cycle/<cycle_id>-<workflow>-<slug>/walkthrough.mjs`). **You define that
+walkthrough here; the build step implements the script from your definition.**
+
+Grounded in SPEC.md's Acceptance Criteria / Verification, specify:
+- The end-to-end user flow that exercises what THIS cycle built — the real
+  routes/screens, **never the home page** as the subject.
+- An ordered list of named capture points (screenshots), e.g. `01-login`,
+  `02-dashboard`, `03-session-live`, each with one line on what it shows.
+- Preconditions / test data the scenario needs (e.g. magic-code auth via a
+  deterministic/test code or seeded user — never a real inbox; a created
+  session; realtime waits on explicit elements, not `networkidle`, which
+  InstantDB keeps busy).
+- If this cycle builds no observable UI behavior, say so explicitly and state
+  that the walkthrough may legitimately degrade — do not silently leave it to
+  the home-page fallback.
+
 ### Step 4: Write the Plan
 
 Output the document below to **stdout** — the engine captures stdout
@@ -124,6 +145,15 @@ explicit waiver.
 ### Integration / E2E Tests
 - [End-to-end scenarios]
 
+## Walkthrough Plan
+[How the `walkthrough_capture` step will demonstrate THIS cycle's functionality.
+The build step authors `$CYCLE_ARTIFACT_DIR/walkthrough.mjs` from this section.]
+- **Flow**: [the end-to-end path over the real new routes — not the home page]
+- **Capture points** (ordered, named): [`01-…`, `02-…`, … — what each shows]
+- **Preconditions / test data**: [auth via test code or seeded user (never a
+  real inbox), seeded session, explicit element waits not `networkidle`]
+- **If no observable UI this cycle**: [state it; note the walkthrough may degrade]
+
 ## Risk Assessment
 - [Potential issue]: [mitigation]
 ```
@@ -155,6 +185,13 @@ explicit waiver.
     traceability stub and fail loudly rather than silently drop a
     bullet. The `review` step rejects PLAN.md with a missing or
     incomplete traceability section.
+12. **Plan the Walkthrough.** The PLAN.md output MUST include a
+    `## Walkthrough Plan` section defining how this cycle's new
+    functionality is demonstrated (flow over the real new routes, ordered
+    named capture points, preconditions/test data). The build step
+    implements `$CYCLE_ARTIFACT_DIR/walkthrough.mjs` from it. A homepage-only
+    walkthrough is a planning failure — only a cycle that genuinely builds no
+    observable UI may say so explicitly here.
 
 ## File Artifact Mode
 
