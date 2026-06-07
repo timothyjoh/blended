@@ -17,12 +17,20 @@ Stick to modern TypeScript/JS without semicolons and two-space indentation, mirr
 The dev-only scratch harness `/dev/event-spine` (`src/components/EventSpineHarness.tsx`) exercises the dual-write path for two event types and renders the live event/projection rows; it is disabled in production builds. Under the permission rules below it writes as the **signed-in** user (sign in at `/login` first), so its session/participant rows are owned by `user.id`. If writes are rejected with a schema error, push the schema to the Instant app with **`npm run schema:push`** (the fail-loud wrapper).
 
 ### Deploy prerequisite runbook (push order)
-Before deploying against a schema-enforced live Instant app, run the two pushes **in this order**:
+Before deploying against a schema-enforced live Instant app, push the schema and perms with the **canonical single command**:
 
-1. **`npm run schema:push`** — push the committed `src/lib/db.ts` schema (entities, links, accreted additive attrs) to the live app. Until this runs, a schema-enforced app **rejects every `writeEvent()` transaction** and the product stops working.
-2. **`npm run perms:push`** — push the permission rules.
+```sh
+npm run db:push
+```
 
-**Order rationale:** the perms rules reference schema-defined links/attrs (e.g. `data.ref('participant.userId')`, `data.ref('session.teacherId')`), so those refs only resolve once the schema is live — schema **first**, then perms. Both wrappers are **fail-loud** (non-zero on missing app id / un-spawnable CLI / CLI auth/network rejection, each with a distinct actionable message) and **idempotent** (declarative `instant-cli push`; re-running an unchanged schema/ruleset is a safe no-op). `npm run schema:push` consumes `PUBLIC_INSTANTDB_APP_ID` and an authenticated `instant-cli login` session; absent these it fails loudly rather than leaving the live app unmigrated while reporting success.
+`db:push` (`scripts/push-db.mjs`, cycle 0022) runs the two pushes **in the one correct order** — `schema:push` first, then `perms:push` **if and only if** the schema step exited 0 — so the ordering and stop-on-failure semantics are an enforced, executable property rather than a ritual the operator must remember. A schema-step failure halts the run non-zero with `db:push: schema step failed (exit N) — halting; perms NOT pushed …` and the perms push is **never** attempted; a perms-step failure surfaces `db:push: perms step failed (exit N)`. The first non-zero exit is forwarded, never collapsed to 0. The full operator procedure (auth → env → `db:push` → credentialed `e2e/permissions.spec.ts` to 0-skipped) is in **`docs/runbooks/db-push.md`**.
+
+The two underlying commands remain the documented **building blocks** `db:push` composes (run them individually only to debug a single half):
+
+1. **`npm run schema:push`** — push the committed `src/lib/db.ts` schema (entities, links, accreted additive attrs) to the live app. Run **first**. Until this runs, a schema-enforced app **rejects every `writeEvent()` transaction** and the product stops working.
+2. **`npm run perms:push`** — push the permission rules. Run **only after** a successful schema push.
+
+**Order rationale:** the perms rules reference schema-defined links/attrs (e.g. `data.ref('participant.userId')`, `data.ref('session.teacherId')`), so those refs only resolve once the schema is live — schema **first**, then perms. All three commands are **fail-loud** (non-zero on missing app id / un-spawnable CLI / CLI auth/network rejection, each with a distinct actionable message) and **idempotent** (declarative `instant-cli push`; re-running an unchanged schema/ruleset is a safe no-op). They consume `PUBLIC_INSTANTDB_APP_ID` and an authenticated `instant-cli login` session; absent these they fail loudly rather than leaving the live app unmigrated while reporting success.
 
 ### Permission rules / data-layer authorization
 `src/lib/perms.ts` is the **single source** of the InstantDB permission rules (cycle 0003); the root `instant.perms.ts` is only a CLI adapter that re-exports it (what `instant-cli push perms` loads). The rules enforce two SPEC invariants at the data layer so they hold even against a hand-crafted client, not just the UI:

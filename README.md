@@ -41,8 +41,9 @@ All commands are run from the root of the project, from a terminal:
 | `npm run test`            | Run Vitest unit tests                            |
 | `npm run test:coverage`   | Run unit tests with a coverage report            |
 | `npm run test:e2e`        | Run Playwright e2e (after `test:e2e:install`)    |
-| `npm run schema:push`     | Push the InstantDB schema to the live app (fail-loud) |
-| `npm run perms:push`      | Push InstantDB permission rules (fail-loud)      |
+| `npm run db:push`         | Push schema **then** perms in one correct, fail-loud, ordered command (canonical deploy entrypoint — see `docs/runbooks/db-push.md`) |
+| `npm run schema:push`     | Push the InstantDB schema to the live app (fail-loud; building block of `db:push`) |
+| `npm run perms:push`      | Push InstantDB permission rules (fail-loud; building block of `db:push`) |
 
 ## Data Layer & Event Spine
 
@@ -79,6 +80,14 @@ wrapper around `npx instant-cli push perms` that exits non-zero with a clear
 message if the app id or `instant-cli` auth is missing, and is safe to re-run
 (declarative). The order matters: the perms rules reference schema-defined
 links/attrs, so the schema must be live first.
+
+> **Deploy with one command.** Rather than running the two pushes by hand in the
+> right order, run **`npm run db:push`** — a fail-loud, idempotent orchestrator
+> that pushes the schema **then** the perms, invoking perms **only if** the schema
+> push succeeded (it can never leave perms pushed against an unmigrated schema).
+> The full operator procedure (auth → env → `db:push` → credentialed
+> `e2e/permissions.spec.ts` to 0-skipped) is in
+> **[`docs/runbooks/db-push.md`](docs/runbooks/db-push.md)**.
 No new required environment variable is introduced (the e2e-only
 `INSTANT_ADMIN_TOKEN`, used by the permissions Playwright suite, is already
 documented below).
