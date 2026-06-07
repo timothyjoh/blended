@@ -1,5 +1,30 @@
 # Release Notes
 
+## Cycle 0015 — Teacher queues a resource (with URL validation)
+
+- **New: teachers can now queue lesson resources on a session.** On the session
+  facilitation view (`/dashboard/sessions/<id>`), a new **Resources** card lets a
+  teacher enter a URL + title, pick a type (generic link, Google Slides, form,
+  PDF, controlled page, or unknown), and click **Add**. The resource appears in a
+  realtime queue ordered oldest-to-newest — each new one appended to the end —
+  with no reload, and a resource queued in another context shows up on its own.
+  This lights up the first end of the Resource feature: before now nothing in the
+  product could create a resource row.
+- **Unsafe URLs are rejected before anything is stored.** Only absolute
+  `http`/`https` links are accepted; an unsafe scheme (`javascript:`, `data:`,
+  `vbscript:`, `file:`, …), a blank URL, or unparseable input is rejected with a
+  clear inline error and **nothing is written** — so an unsafe URL can never be
+  stored or later rendered. URL safety lives behind a single, pure, total
+  validation seam, so a future allowlist/SSRF tightening touches exactly one place.
+- **Under the hood:** each successful add writes a replayable `ResourceQueued`
+  event together with the `sessionResources` projection row in one transaction
+  (no orphan event, no orphan row on failure), sets the forgery-proof `session`
+  ownership link so the existing owner-only-write rule admits only the real owner,
+  and defaults the deferred embed fields conservatively (`embedMode: 'blocked'`,
+  `embedStatus: 'unchecked'`). **No schema or permission push** is required — the
+  `sessionResources` entity, its link, and its rule all predate this cycle.
+  Reorder, remove, activate, and embed-checking are deferred to sibling cycles.
+
 ## Cycle 0014 — Chat messages: author-scoped writes, spoof-proof identity
 
 - **A student's chat messages can no longer be edited, deleted, or impersonated

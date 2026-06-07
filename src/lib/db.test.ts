@@ -135,6 +135,40 @@ const questionAnsweredNoSummary: EventLike = {
   },
 }
 
+const resourceQueued: EventLike = {
+  id: 'evt-10',
+  type: 'ResourceQueued',
+  occurredAt: 10000,
+  receivedAt: 10000,
+  payload: {
+    id: 'r1',
+    sessionId: 's1',
+    teacherId: 'teacher-1',
+    url: 'https://example.com/slides',
+    title: 'Intro slides',
+    type: 'google_slides',
+    sortOrder: 0,
+    createdAt: 10000,
+  },
+}
+
+const resourceQueued2: EventLike = {
+  id: 'evt-11',
+  type: 'ResourceQueued',
+  occurredAt: 11000,
+  receivedAt: 11000,
+  payload: {
+    id: 'r2',
+    sessionId: 's1',
+    teacherId: 'teacher-1',
+    url: 'https://example.com/handout.pdf',
+    title: 'Handout',
+    type: 'pdf',
+    sortOrder: 1,
+    createdAt: 11000,
+  },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -326,6 +360,64 @@ describe('applyEvent', () => {
     expect(created.questions.q1).not.toHaveProperty('answerSummary')
   })
 
+  it('folds ResourceQueued keyed by resource id without throwing', () => {
+    expect(() => applyEvent(emptyProjection('s1'), resourceQueued)).not.toThrow()
+    const result = applyEvent(emptyProjection('s1'), resourceQueued)
+    expect(result.resources.r1).toEqual({
+      id: 'r1',
+      sessionId: 's1',
+      url: 'https://example.com/slides',
+      title: 'Intro slides',
+      type: 'google_slides',
+      sortOrder: 0,
+      createdAt: 10000,
+    })
+  })
+
+  it('accumulates multiple queued resources in the resources map', () => {
+    const first = applyEvent(emptyProjection('s1'), resourceQueued)
+    const second = applyEvent(first, resourceQueued2)
+    expect(Object.keys(second.resources)).toEqual(['r1', 'r2'])
+    expect(second.resources.r2.sortOrder).toBe(1)
+  })
+
+  it('folds ResourceQueued defensively on a partial payload (keys by event id, defaults the rest)', () => {
+    const partial: EventLike = {
+      id: 'evt-r-partial',
+      type: 'ResourceQueued',
+      occurredAt: 12000,
+      receivedAt: 12000,
+      payload: {},
+    }
+    const result = applyEvent(emptyProjection('s1'), partial)
+    expect(result.resources['evt-r-partial']).toEqual({
+      id: 'evt-r-partial',
+      sessionId: 's1',
+      url: '',
+      title: '',
+      type: 'generic_url',
+      sortOrder: 0,
+      createdAt: 12000,
+    })
+  })
+
+  it('re-folding the same ResourceQueued reproduces the identical entry (idempotent)', () => {
+    const once = applyEvent(emptyProjection('s1'), resourceQueued)
+    const twice = applyEvent(once, resourceQueued)
+    expect(twice.resources.r1).toEqual(once.resources.r1)
+    expect(Object.keys(twice.resources)).toEqual(['r1'])
+  })
+
+  it('does not mutate the input projection when folding a ResourceQueued', () => {
+    const base = emptyProjection('s1')
+    applyEvent(base, resourceQueued)
+    expect(base.resources).toEqual({})
+  })
+
+  it('does not throw on ResourceQueued (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), resourceQueued)).not.toThrow()
+  })
+
   it('surfaces an unknown event type instead of dropping it', () => {
     const unknown: EventLike = {
       id: 'evt-x',
@@ -497,6 +589,33 @@ describe('rebuildSessionProjection determinism', () => {
       answerSummary: 'mitosis is cell division',
       addressedBy: 'teacher-1',
     })
+  })
+
+  it('rebuilds a stream including queued resources, regardless of input order', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      resourceQueued,
+      resourceQueued2,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      resourceQueued2,
+      sessionStarted,
+      resourceQueued,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    expect(Object.keys(inOrder.resources)).toEqual(['r1', 'r2'])
+    expect(inOrder.resources.r1).toEqual({
+      id: 'r1',
+      sessionId: 's1',
+      url: 'https://example.com/slides',
+      title: 'Intro slides',
+      type: 'google_slides',
+      sortOrder: 0,
+      createdAt: 10000,
+    })
+    expect(inOrder.resources.r2.sortOrder).toBe(1)
   })
 
   it('orders by occurredAt, then receivedAt, then id (§17.1)', () => {

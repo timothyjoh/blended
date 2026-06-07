@@ -244,6 +244,21 @@ export type SessionProjection = {
       addressedBy?: string
     }
   >
+  // Cycle 0015: teacher-queued lesson resources, keyed by resource id, ordered
+  // for display by `sortOrder` (tie-broken by id). Carries only the render fields
+  // — deferred-feature fields (embedMode/embedStatus/activatedAt) are not folded.
+  resources: Record<
+    string,
+    {
+      id: string
+      sessionId: string
+      url: string
+      title: string
+      type: string
+      sortOrder: number
+      createdAt: number
+    }
+  >
 }
 
 /** Raised when `applyEvent` meets a type it does not know — never silently dropped. */
@@ -255,7 +270,7 @@ export class UnknownEventTypeError extends Error {
 }
 
 export function emptyProjection(sessionId: string): SessionProjection {
-  return { sessionId, session: null, participants: {}, messages: {}, questions: {} }
+  return { sessionId, session: null, participants: {}, messages: {}, questions: {}, resources: {} }
 }
 
 /**
@@ -424,6 +439,41 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
             status: 'answered',
             ...(typeof p.answerSummary === 'string' ? { answerSummary: p.answerSummary } : {}),
             ...(typeof p.addressedBy === 'string' ? { addressedBy: p.addressedBy } : {}),
+          },
+        },
+      }
+    }
+    case 'ResourceQueued': {
+      // Cycle 0015: fold a teacher-queued resource into the `resources` map,
+      // keyed by the deterministic resource id. Mirrors `QuestionCreated`:
+      // tolerant of absent prior state + partial payload (defensive defaults —
+      // `type` → 'generic_url', `sortOrder` → 0, `createdAt` falls back to
+      // `occurredAt`, `sessionId` falls back to the projection's), never mutates
+      // input, and re-folding the same event reproduces the same entry. Keeps
+      // `rebuildSessionProjection` whole — `ResourceQueued` never reaches the
+      // `default` and so never raises `UnknownEventTypeError`.
+      const p = event.payload as {
+        id?: string
+        sessionId?: string
+        url?: string
+        title?: string
+        type?: string
+        sortOrder?: number
+        createdAt?: number
+      }
+      const resourceId = typeof p.id === 'string' ? p.id : event.id
+      return {
+        ...projection,
+        resources: {
+          ...projection.resources,
+          [resourceId]: {
+            id: resourceId,
+            sessionId: typeof p.sessionId === 'string' ? p.sessionId : projection.sessionId,
+            url: typeof p.url === 'string' ? p.url : '',
+            title: typeof p.title === 'string' ? p.title : '',
+            type: typeof p.type === 'string' ? p.type : 'generic_url',
+            sortOrder: typeof p.sortOrder === 'number' ? p.sortOrder : 0,
+            createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
           },
         },
       }

@@ -257,6 +257,27 @@ the queue and surfaces an inline error rather than silently dropping it. No
 schema or permission push is required this cycle (the `questions` fields already
 exist; no new `.env` keys). The e2e suite is `e2e/teacher-question-queue.spec.ts`.
 
+## Queuing lesson resources (teacher)
+
+The teacher facilitation view (`/dashboard/sessions/<id>`) now has a **Resources**
+card below the question queue. Enter a resource URL and title, pick a type
+(`generic_url`, `google_slides`, `form`, `pdf`, `controlled_page`, `unknown`), and
+click **Add** — the resource appears in a **live queue** ordered oldest-to-newest
+with no reload, each new one appended to the end. The queue is realtime: a
+resource queued in another context shows up here on its own.
+
+URLs are validated before anything is stored: only absolute `http`/`https` links
+are accepted. An unsafe scheme (`javascript:`, `data:`, `vbscript:`, `file:`, …),
+a blank URL, or unparseable input is **rejected inline** and **nothing is
+written** — so an unsafe URL can never be stored or later rendered. Each
+successful add writes a replayable `ResourceQueued` event together with the
+`sessionResources` row in one transaction, and a rejected write surfaces an inline
+error while keeping your entered values for retry. No schema or permission push is
+required this cycle (the `sessionResources` entity and its owner-only-write rule
+already exist; no new `.env` keys). Reordering, removing, activating, and
+embed-checking resources arrive in later cycles. The e2e suite is
+`e2e/queue-resource.spec.ts`.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed

@@ -1,0 +1,14 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "release-notes.md",
+    "src/components/SessionLifecycle.tsx",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/resources.test.ts",
+    "src/lib/resources.ts",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts"
+  ]
+}

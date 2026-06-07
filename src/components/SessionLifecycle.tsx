@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { db } from '@/lib/db'
 import { useAuth } from '@/lib/useAuth'
-import { startSession, endSession, isJoinEnabled, answerQuestion } from '@/lib/sessions'
+import {
+  startSession,
+  endSession,
+  isJoinEnabled,
+  answerQuestion,
+  queueResource,
+  RESOURCE_TYPES,
+} from '@/lib/sessions'
+import { validateResourceUrl } from '@/lib/resources'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -33,6 +41,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 // never swallowed, leaving the Question in the queue so the teacher can retry; a
 // per-Question pending latch + the builder's already-answered guard suppress a
 // double-resolution.
+//
+// Cycle 0015: below the question queue it also mounts the teacher add-resource
+// control + a realtime, read-only queue list. A THIRD `db.useQuery` over
+// `sessionResources` by `sessionId` renders the queued resources ordered by
+// `sortOrder` (tie-broken by id). The add form (url + title + type selector) gates
+// the URL through the single `validateResourceUrl` seam BEFORE any write — an
+// unsafe-scheme/blank/unparseable URL surfaces inline (`role="alert"`) +
+// `console.error` and writes nothing — then routes the dual-write through the sole
+// sanctioned `queueResource` → a `ResourceQueued` event + `sessionResources` row in
+// one transaction, placing the new resource at the end of the queue
+// (`currentMaxSortOrder` derived from the live query). A query error renders an
+// inline alert checked BEFORE the empty state (an errored query never reads as
+// falsely-empty); a rejected write surfaces inline and retains the entered values
+// for retry; a per-submit pending latch suppresses a double-submit. Reorder/remove/
+// activate/embed-check are deferred to sibling cycles.
 // ---------------------------------------------------------------------------
 
 export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
@@ -51,13 +74,85 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [qError, setQError] = useState<string | null>(null)
 
+  // Cycle 0015: realtime resource queue. A third live query over
+  // `sessionResources` by `sessionId`. Add-form drafts, a per-submit pending
+  // latch, and a dedicated error string surfaced inline (never swallowed).
+  const rq = db.useQuery(
+    sessionId ? { sessionResources: { $: { where: { sessionId } } } } : null
+  )
+  const [resUrl, setResUrl] = useState('')
+  const [resTitle, setResTitle] = useState('')
+  const [resType, setResType] = useState<string>('generic_url')
+  const [resError, setResError] = useState<string | null>(null)
+  const [resPending, setResPending] = useState(false)
+
   // Query errors: surface them (never swallow). The controls are gated on a
   // loaded session below, so a failed query renders the non-actionable error
   // state; a failed questions query is logged and the queue stays empty/observable.
   if (q.error) console.error('[SessionLifecycle] session query error:', q.error)
   if (qq.error) console.error('[SessionLifecycle] questions query error:', qq.error)
+  if (rq.error) console.error('[SessionLifecycle] resources query error:', rq.error)
 
   const session = q.data?.sessions?.[0] ?? null
+
+  // Cycle 0015: ordered queue (inline comparator, mirroring the question sort) —
+  // by sortOrder, tie-broken by id for a stable order without a server index.
+  const resources = [...(rq.data?.sessionResources ?? [])].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+  const currentMaxSortOrder = resources.length
+    ? Math.max(...resources.map((r) => r.sortOrder))
+    : null
+
+  async function addResource() {
+    setResError(null)
+    if (!user?.id) {
+      setResError('You must be signed in to queue a resource')
+      return
+    }
+    // Client-side gate through the SINGLE validation seam BEFORE any write — an
+    // unsafe scheme / blank / unparseable URL is rejected with no `queueResource`
+    // call, entered values retained.
+    const valid = validateResourceUrl(resUrl)
+    if (!valid.ok) {
+      setResError(
+        valid.reason === 'unsafe_scheme'
+          ? 'That URL scheme is not allowed. Use an http(s) link.'
+          : valid.reason === 'blank'
+            ? 'Enter a URL.'
+            : 'That URL could not be parsed.'
+      )
+      console.error('[SessionLifecycle] add resource rejected:', valid.reason)
+      return
+    }
+    if ((resTitle ?? '').trim() === '') {
+      setResError('Enter a title.')
+      return
+    }
+    setResPending(true)
+    try {
+      await queueResource({
+        sessionId,
+        url: resUrl,
+        title: resTitle,
+        type: resType,
+        actor: { id: user.id, role: 'teacher' },
+        currentMaxSortOrder,
+      })
+      // Clear the form only on success; the live query renders the new row.
+      setResUrl('')
+      setResTitle('')
+      setResType('generic_url')
+    } catch (err) {
+      // Surface the rejection inline + log — never swallowed; retain inputs for retry.
+      const message = err instanceof Error ? err.message : String(err)
+      setResError(message)
+      console.error('[SessionLifecycle] add resource failed:', err)
+    } finally {
+      setResPending(false)
+    }
+  }
 
   // Open Questions only (answered ones leave the queue), sorted by createdAt then
   // id for a stable order without a server-side index (mirrors StudentChat).
@@ -286,6 +381,106 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
                 {qError}
               </p>
             ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Resources</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <input
+              data-testid="add-resource-url"
+              className="rounded-md border px-2 py-1 text-sm"
+              placeholder="https://… resource URL"
+              value={resUrl}
+              onChange={(e) => setResUrl(e.target.value)}
+            />
+            <input
+              data-testid="add-resource-title"
+              className="rounded-md border px-2 py-1 text-sm"
+              placeholder="Resource title"
+              value={resTitle}
+              onChange={(e) => setResTitle(e.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                data-testid="add-resource-type"
+                className="rounded-md border px-2 py-1 text-sm"
+                value={resType}
+                onChange={(e) => setResType(e.target.value)}
+              >
+                {RESOURCE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <Button
+                data-testid="add-resource-submit"
+                disabled={resPending}
+                onClick={addResource}
+              >
+                {resPending ? 'Adding…' : 'Add'}
+              </Button>
+            </div>
+            {resError ? (
+              <p
+                data-testid="add-resource-error"
+                role="alert"
+                className="text-sm text-destructive"
+              >
+                {resError}
+              </p>
+            ) : null}
+          </div>
+
+          <div data-testid="resource-queue" className="flex flex-col gap-2">
+            {rq.error ? (
+              <p
+                data-testid="resource-queue-error"
+                role="alert"
+                className="text-sm text-destructive"
+              >
+                The resource queue could not be loaded.
+              </p>
+            ) : rq.isLoading ? (
+              <p
+                data-testid="resource-queue-loading"
+                className="text-sm text-muted-foreground"
+              >
+                Loading resources…
+              </p>
+            ) : resources.length === 0 ? (
+              <p
+                data-testid="resource-queue-empty"
+                className="text-sm text-muted-foreground"
+              >
+                No resources queued yet. Add one above and it appears here in real time.
+              </p>
+            ) : (
+              resources.map((r) => (
+                <div
+                  key={r.id}
+                  data-testid="resource-item"
+                  data-resource-id={r.id}
+                  data-sort-order={r.sortOrder}
+                  className="flex flex-col gap-1 rounded-md border p-3"
+                >
+                  <p data-testid="resource-title" className="text-sm font-medium">
+                    {r.title}
+                  </p>
+                  <p data-testid="resource-url" className="break-all text-xs text-muted-foreground">
+                    {r.url}
+                  </p>
+                  <p data-testid="resource-type" className="text-xs text-muted-foreground">
+                    {r.type}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

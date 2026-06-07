@@ -24,7 +24,12 @@ import {
   SESSION_LIST_TITLE_FALLBACK,
   sessionDisplayTitle,
   compareSessionsForList,
+  RESOURCE_TYPES,
+  buildResourceQueue,
+  queueResource,
+  defaultResourceTxn,
   type SessionListRow,
+  type SessionResourceRecord,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -1026,6 +1031,216 @@ describe('SessionList display helpers (cycle 0012)', () => {
         'e',
         'd',
       ])
+    })
+  })
+})
+
+describe('buildResourceQueue', () => {
+  const okInput = {
+    sessionId: 's1',
+    url: 'https://example.com/slides',
+    title: 'Intro slides',
+    type: 'google_slides',
+    actor: { id: 'teacher-1', role: 'teacher' },
+    id: 'r1',
+    now: 4242,
+  }
+
+  it('produces the projection record + ResourceQueued envelope on valid input', () => {
+    const { record, meta } = buildResourceQueue(okInput)
+    expect(record).toEqual({
+      id: 'r1',
+      sessionId: 's1',
+      teacherId: 'teacher-1',
+      url: 'https://example.com/slides',
+      title: 'Intro slides',
+      type: 'google_slides',
+      sortOrder: 0,
+      embedMode: 'blocked',
+      embedStatus: 'unchecked',
+      createdAt: 4242,
+    })
+    // meta.payload.id === record.id so the event folds cleanly.
+    expect(meta.payload.id).toBe(record.id)
+    expect(meta.actor).toEqual({ id: 'teacher-1', role: 'teacher' })
+    expect(meta.sessionId).toBe('s1')
+  })
+
+  it('sets teacherId = the actor id (denormalized owner)', () => {
+    expect(buildResourceQueue(okInput).record.teacherId).toBe('teacher-1')
+  })
+
+  it('defaults deferred-feature fields safely (blocked/unchecked, no activatedAt)', () => {
+    const { record } = buildResourceQueue(okInput)
+    expect(record.embedMode).toBe('blocked')
+    expect(record.embedStatus).toBe('unchecked')
+    expect(record).not.toHaveProperty('activatedAt')
+  })
+
+  it('stores the normalized url from the validator', () => {
+    const { record } = buildResourceQueue({ ...okInput, url: '  https://example.com  ' })
+    expect(record.url).toBe('https://example.com/')
+  })
+
+  it('trims the title before storing', () => {
+    expect(buildResourceQueue({ ...okInput, title: '  Slides  ' }).record.title).toBe('Slides')
+  })
+
+  it('defaults a blank type to generic_url', () => {
+    expect(buildResourceQueue({ ...okInput, type: '  ' }).record.type).toBe('generic_url')
+  })
+
+  it('computes sortOrder = 0 for an empty queue (null/undefined current max)', () => {
+    expect(buildResourceQueue({ ...okInput, currentMaxSortOrder: null }).record.sortOrder).toBe(0)
+    expect(buildResourceQueue({ ...okInput, currentMaxSortOrder: undefined }).record.sortOrder).toBe(
+      0
+    )
+  })
+
+  it('computes sortOrder = max + 1 for a non-empty queue (end-of-queue)', () => {
+    expect(buildResourceQueue({ ...okInput, currentMaxSortOrder: 4 }).record.sortOrder).toBe(5)
+  })
+
+  it('throws on a non-teacher actor (before any plan)', () => {
+    expect(() =>
+      buildResourceQueue({ ...okInput, actor: { id: 'u1', role: 'student' } })
+    ).toThrow(/only a teacher/)
+  })
+
+  it('throws on a missing actor id', () => {
+    expect(() =>
+      buildResourceQueue({ ...okInput, actor: { id: null, role: 'teacher' } })
+    ).toThrow(/actor userId is required/)
+  })
+
+  it('throws on a missing sessionId', () => {
+    expect(() => buildResourceQueue({ ...okInput, sessionId: null })).toThrow(
+      /sessionId is required/
+    )
+  })
+
+  it('throws on a blank/whitespace title', () => {
+    expect(() => buildResourceQueue({ ...okInput, title: '   ' })).toThrow(/title is required/)
+  })
+
+  it('throws on an unsafe-scheme URL (rejected by the validator)', () => {
+    expect(() => buildResourceQueue({ ...okInput, url: 'javascript:alert(1)' })).toThrow(
+      /invalid url \(unsafe_scheme\)/
+    )
+  })
+
+  it('throws on a data: URL (a second unsafe scheme)', () => {
+    expect(() => buildResourceQueue({ ...okInput, url: 'data:text/html,x' })).toThrow(
+      /invalid url \(unsafe_scheme\)/
+    )
+  })
+
+  it('throws on an unparseable/bare URL', () => {
+    expect(() => buildResourceQueue({ ...okInput, url: 'example.com' })).toThrow(
+      /invalid url \(unparseable\)/
+    )
+  })
+
+  it('surfaces every value in the RESOURCE_TYPES closed set', () => {
+    expect(RESOURCE_TYPES).toEqual([
+      'generic_url',
+      'google_slides',
+      'form',
+      'pdf',
+      'controlled_page',
+      'unknown',
+    ])
+  })
+})
+
+describe('queueResource', () => {
+  const okInput = {
+    sessionId: 's1',
+    url: 'https://example.com/slides',
+    title: 'Intro slides',
+    type: 'generic_url',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+    id: 'r1',
+    now: 4242,
+  }
+
+  it('dual-writes ResourceQueued with exactly one projection txn', async () => {
+    let calledType: string | null = null
+    let calledTxnCount = -1
+    const write = (type: string, _meta: unknown, txns: unknown[]) => {
+      calledType = type
+      calledTxnCount = txns.length
+      return Promise.resolve()
+    }
+    const buildTxn = (r: SessionResourceRecord) => ({ marker: r.id }) as never
+    const record = await queueResource(okInput, { write: write as never, buildTxn })
+    expect(calledType).toBe('ResourceQueued')
+    expect(calledTxnCount).toBe(1)
+    expect(record.id).toBe('r1')
+  })
+
+  it('does not write when the builder rejects an unsafe scheme (no txn)', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      queueResource(
+        { ...okInput, url: 'javascript:alert(1)' },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/invalid url \(unsafe_scheme\)/)
+    expect(called).toBe(false)
+  })
+
+  it('does not catch a rejecting write — the rejection propagates', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      queueResource(okInput, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('defaultResourceTxn (real projection txn, cycle 0015)', () => {
+  // The queueResource wrapper tests stub `buildTxn`, so they never exercise the
+  // real txn body. This invokes the real builder and pins that it sets the
+  // forgery-proof `session` link the existing owner-only-write rule traverses,
+  // and keys the row + writes the deferred-feature defaults.
+  const record: SessionResourceRecord = {
+    id: 'r1',
+    sessionId: 's1',
+    teacherId: 'teacher-1',
+    url: 'https://example.com/slides',
+    title: 'Intro slides',
+    type: 'google_slides',
+    sortOrder: 0,
+    embedMode: 'blocked',
+    embedStatus: 'unchecked',
+    createdAt: 4242,
+  }
+
+  it('sets the session ownership link from the record', () => {
+    const txn = defaultResourceTxn(record) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const linkOp = txn.__ops.find((op) => op[0] === 'link')
+    expect(linkOp, 'defaultResourceTxn must emit a link op').toBeDefined()
+    expect(linkOp![3]).toEqual({ session: 's1' })
+  })
+
+  it('keys the row on the resource id and writes the deferred-feature defaults', () => {
+    const txn = defaultResourceTxn(record) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const updateOp = txn.__ops.find((op) => op[0] === 'update')
+    expect(updateOp![2]).toBe('r1')
+    expect(updateOp![3]).toMatchObject({
+      sessionId: 's1',
+      teacherId: 'teacher-1',
+      embedMode: 'blocked',
+      embedStatus: 'unchecked',
+      sortOrder: 0,
     })
   })
 })

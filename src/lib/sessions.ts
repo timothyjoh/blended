@@ -1,5 +1,6 @@
 import { db, id, writeEvent, type ActorRole, type ProjectionTxn, type WriteEventMeta } from './db'
 import { classifyMessage, deriveQuestionId } from './classify'
+import { validateResourceUrl } from './resources'
 
 // ---------------------------------------------------------------------------
 // Session creation action (cycle 0005). Mirrors the pure-core pattern of
@@ -785,4 +786,164 @@ export function compareSessionsForList(a: SessionListRow, b: SessionListRow): nu
   const cb = b.createdAt ?? 0
   if (ca !== cb) return ca - cb
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+// ---------------------------------------------------------------------------
+// Queue a resource (cycle 0015). The FIRST product path that creates a
+// `sessionResources` row, following the same pure-core/thin-wrapper split as
+// create/join/chat above: `buildResourceQueue` totally validates input (teacher
+// role, present `actor.id`/`sessionId`, non-blank title, URL accepted by the
+// single `validateResourceUrl` seam) and computes an end-of-queue `sortOrder`
+// BEFORE producing any plan; `queueResource` routes the dual-write through
+// `writeEvent('ResourceQueued', …)` so the envelope (`actor.role: 'teacher'`)
+// and the `sessionResources` projection row (with the `session` ownership link +
+// denormalized `teacherId`) commit in ONE transaction. Deferred-feature fields
+// default safely: `embedMode: 'blocked'` (render as a link, never auto-embed
+// until the deferred embed-checking cycle verifies it), `embedStatus: 'unchecked'`,
+// no `activatedAt`. Reorder/remove/activate/embed-check are sibling cycles.
+// ---------------------------------------------------------------------------
+
+/** Closed set of resource types the add-resource selector surfaces (SPEC). */
+export const RESOURCE_TYPES = [
+  'generic_url',
+  'google_slides',
+  'form',
+  'pdf',
+  'controlled_page',
+  'unknown',
+] as const
+
+export type ResourceType = (typeof RESOURCE_TYPES)[number]
+
+/** The `sessionResources` projection row this cycle writes — always `unchecked`/`blocked`. */
+export type SessionResourceRecord = {
+  id: string
+  sessionId: string
+  teacherId: string
+  url: string
+  title: string
+  type: string
+  sortOrder: number
+  embedMode: 'blocked'
+  embedStatus: 'unchecked'
+  createdAt: number
+}
+
+export type BuildResourceQueueInput = {
+  sessionId: string | null | undefined
+  url: string | null | undefined
+  title: string | null | undefined
+  type: string | null | undefined
+  actor: { id: string | null | undefined; role: string }
+  // End-of-queue source: the max sortOrder of the session's existing queue, or
+  // null/undefined for an empty queue. Injected from the component's live query.
+  currentMaxSortOrder?: number | null
+  // Injectable for deterministic tests; production uses the defaults.
+  id?: string
+  now?: number
+}
+
+export type ResourceQueuePlan = { record: SessionResourceRecord; meta: WriteEventMeta }
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A non-teacher actor,
+ * a missing `actor.id`, a missing `sessionId`, a blank/whitespace title, or a URL
+ * the single `validateResourceUrl` seam rejects (unsafe scheme / unparseable /
+ * blank) is rejected by throwing synchronously — so nothing is ever written for an
+ * invalid queue. `sortOrder` is computed end-of-queue from the injected current max
+ * (`null` → `0` for an empty queue, else `max + 1`) so a new resource renders last.
+ * The stored `url` is the normalized href from the validator; the title is trimmed.
+ * `record.id === meta.payload.id` so the event folds cleanly through `applyEvent`'s
+ * `ResourceQueued` case. Deferred-feature fields default to `embedMode: 'blocked'`
+ * / `embedStatus: 'unchecked'` (no `activatedAt`).
+ */
+export function buildResourceQueue(input: BuildResourceQueueInput): ResourceQueuePlan {
+  if (input.actor?.role !== 'teacher')
+    throw new Error('queueResource: only a teacher may queue a resource')
+  const teacherId = input.actor?.id
+  if (!teacherId) throw new Error('queueResource: an actor userId is required')
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('queueResource: a sessionId is required')
+  const title = (input.title ?? '').trim()
+  if (title === '') throw new Error('queueResource: a resource title is required')
+  const valid = validateResourceUrl(input.url)
+  if (!valid.ok) throw new Error(`queueResource: invalid url (${valid.reason})`)
+
+  const resourceId = input.id ?? id()
+  const sortOrder = input.currentMaxSortOrder == null ? 0 : input.currentMaxSortOrder + 1
+  const type = (input.type ?? '').trim() || 'generic_url'
+  const record: SessionResourceRecord = {
+    id: resourceId,
+    sessionId,
+    teacherId,
+    url: valid.url,
+    title,
+    type,
+    sortOrder,
+    embedMode: 'blocked',
+    embedStatus: 'unchecked',
+    createdAt: input.now ?? Date.now(),
+  }
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: teacherId, role: 'teacher' },
+    payload: {
+      id: resourceId,
+      sessionId,
+      teacherId,
+      url: record.url,
+      title,
+      type,
+      sortOrder,
+      createdAt: record.createdAt,
+    },
+  }
+  return { record, meta }
+}
+
+export const defaultResourceTxn = (r: SessionResourceRecord): ProjectionTxn =>
+  db.tx.sessionResources[r.id]
+    .update({
+      sessionId: r.sessionId,
+      teacherId: r.teacherId,
+      url: r.url,
+      title: r.title,
+      type: r.type,
+      sortOrder: r.sortOrder,
+      embedMode: r.embedMode,
+      embedStatus: r.embedStatus,
+      createdAt: r.createdAt,
+    })
+    // Set the forgery-proof ownership link the existing `sessionResources` rule
+    // traverses (`data.ref('session.teacherId')`) — the client cannot forge it,
+    // so the write is admitted only for the real owning teacher (cycle 0003).
+    .link({ session: r.sessionId })
+
+export type QueueResourceDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (record: SessionResourceRecord) => ProjectionTxn
+}
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then
+ * dual-writes the `ResourceQueued` envelope + `sessionResources` projection row
+ * (including the `session` link) in ONE `writeEvent` transaction. Because the
+ * append and projection share that transaction, a rejected queue leaves no partial
+ * state (no orphan event, no orphan row). NOT idempotent by design — each call
+ * mints a fresh resource id and appends a fresh event; a retry creates a new row.
+ * The `sortOrder` race (two simultaneous adds resolving the same `max+1`) is
+ * accepted as non-blocking per SPEC — rows stay deterministically ordered by the
+ * id tie-break, and true reorder is a sibling cycle. The rejection propagates to
+ * the caller and is never swallowed. `deps` are injectable so the validation and
+ * rejection paths are unit-testable without a network.
+ */
+export async function queueResource(
+  input: BuildResourceQueueInput,
+  deps: QueueResourceDeps = {}
+): Promise<SessionResourceRecord> {
+  const plan = buildResourceQueue(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultResourceTxn
+  await write('ResourceQueued', plan.meta, [buildTxn(plan.record)])
+  return plan.record
 }
