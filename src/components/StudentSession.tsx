@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import ResourcePane from './ResourcePane'
 
 // ---------------------------------------------------------------------------
 // The student session view (cycle 0007). Mounted inside `RouteGuard` on
@@ -10,6 +11,14 @@ import { db } from '@/lib/db'
 // with no manual refresh. Reads are open (`sessions.view = 'true'`), so this view
 // renders regardless of membership; it does NOT gate on being a participant (out
 // of scope). It never renders email — the field does not exist on the row.
+//
+// Cycle 0016: it also mounts the shared `ResourcePane`, driven SOLELY by the
+// existing session-by-`joinCode` query's `activeResourceId`/`currentUrl` (no
+// `sessionResources` query is added — that is exactly why `currentUrl` lives on
+// the session row). When the teacher activates a resource the live query
+// re-renders and the pane switches with no reload; a context that loads after
+// activation immediately shows the current active resource; before any activation
+// it renders an explicit empty state.
 // ---------------------------------------------------------------------------
 
 export default function StudentSession({ joinCode }: { joinCode: string }) {
@@ -71,6 +80,10 @@ export default function StudentSession({ joinCode }: { joinCode: string }) {
           {session.status}
         </span>
       </p>
+      <ResourcePane
+        activeResourceId={session.activeResourceId}
+        currentUrl={session.currentUrl}
+      />
       <div>
         <p className="text-sm text-muted-foreground">In this session:</p>
         <ul data-testid="student-session-presence" className="mt-1 flex flex-col gap-1">

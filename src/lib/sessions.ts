@@ -947,3 +947,95 @@ export async function queueResource(
   await write('ResourceQueued', plan.meta, [buildTxn(plan.record)])
   return plan.record
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 0016: Activate a resource — the SOLE sanctioned activation path.
+// A teacher activates a queued resource; we dual-write a `ResourceActivated`
+// event and set `sessions[id].activeResourceId` + a derived `currentUrl` in ONE
+// transaction (ADR-0001/ADR-0003). Mirrors the cycle-0015 queue path exactly:
+// a pure total builder that throws BEFORE producing any plan, a thin wrapper
+// routing the dual-write through `writeEvent`, and an exported default txn.
+// The projection write is a plain keyed `sessions[id].update` (no link — the
+// session row already exists) and inherits the existing owner-only-write rule.
+// ---------------------------------------------------------------------------
+
+export type BuildResourceActivateInput = {
+  sessionId: string | null | undefined
+  resourceId: string | null | undefined
+  actor: { id: string | null | undefined; role: string }
+  // The session's queued resources from the component's live query, used to
+  // confirm the target belongs to the session and to derive `currentUrl`.
+  resources: ReadonlyArray<{ id: string; sessionId: string; url: string }>
+  now?: number
+}
+
+export type ResourceActivatePlan = {
+  sessionId: string
+  resourceId: string
+  currentUrl: string
+  meta: WriteEventMeta
+}
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A non-teacher actor,
+ * a missing `actor.id`/`sessionId`/`resourceId`, a resource that does not belong
+ * to the session, or a resource with a blank/missing URL is rejected by throwing
+ * synchronously — so nothing is ever written for an invalid activation. Derives
+ * `currentUrl` from the (already-normalized) resource URL. The envelope hard-sets
+ * `actor.role: 'teacher'`. The payload carries `sessionId`/`resourceId`/`currentUrl`
+ * so it folds cleanly through `applyEvent`'s `ResourceActivated` case.
+ */
+export function buildResourceActivate(input: BuildResourceActivateInput): ResourceActivatePlan {
+  if (input.actor?.role !== 'teacher')
+    throw new Error('activateResource: only a teacher may activate a resource')
+  const teacherId = input.actor?.id
+  if (!teacherId) throw new Error('activateResource: an actor userId is required')
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('activateResource: a sessionId is required')
+  const resourceId = input.resourceId
+  if (!resourceId) throw new Error('activateResource: a resourceId is required')
+  const resource = (input.resources ?? []).find((r) => r.id === resourceId)
+  if (!resource || resource.sessionId !== sessionId)
+    throw new Error('activateResource: resource does not belong to this session')
+  const currentUrl = (resource.url ?? '').trim()
+  if (currentUrl === '') throw new Error('activateResource: resource has no url')
+
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: teacherId, role: 'teacher' },
+    payload: { sessionId, resourceId, currentUrl },
+  }
+  return { sessionId, resourceId, currentUrl, meta }
+}
+
+export const defaultResourceActivateTxn = (plan: ResourceActivatePlan): ProjectionTxn =>
+  db.tx.sessions[plan.sessionId].update({
+    activeResourceId: plan.resourceId,
+    currentUrl: plan.currentUrl,
+  })
+
+export type ActivateResourceDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (plan: ResourceActivatePlan) => ProjectionTxn
+}
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then
+ * dual-writes the `ResourceActivated` envelope + the keyed `sessions` projection
+ * update (activeResourceId + currentUrl) in ONE `writeEvent` transaction. A rejected
+ * write leaves no partial state (no orphan event, unchanged active resource). NOT
+ * idempotent by design — each call appends a fresh event; the projection write is
+ * convergent (re-activating the same resource re-sets identical values). The
+ * rejection propagates and is never swallowed. `deps` are injectable so the
+ * validation and rejection paths are unit-testable without a network.
+ */
+export async function activateResource(
+  input: BuildResourceActivateInput,
+  deps: ActivateResourceDeps = {}
+): Promise<ResourceActivatePlan> {
+  const plan = buildResourceActivate(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultResourceActivateTxn
+  await write('ResourceActivated', plan.meta, [buildTxn(plan)])
+  return plan
+}

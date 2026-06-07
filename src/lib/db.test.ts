@@ -169,6 +169,30 @@ const resourceQueued2: EventLike = {
   },
 }
 
+const resourceActivated: EventLike = {
+  id: 'evt-20',
+  type: 'ResourceActivated',
+  occurredAt: 20000,
+  receivedAt: 20000,
+  payload: {
+    sessionId: 's1',
+    resourceId: 'r1',
+    currentUrl: 'https://example.com/slides',
+  },
+}
+
+const resourceActivated2: EventLike = {
+  id: 'evt-21',
+  type: 'ResourceActivated',
+  occurredAt: 21000,
+  receivedAt: 21000,
+  payload: {
+    sessionId: 's1',
+    resourceId: 'r2',
+    currentUrl: 'https://example.com/handout.pdf',
+  },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -418,6 +442,56 @@ describe('applyEvent', () => {
     expect(() => applyEvent(emptyProjection('s1'), resourceQueued)).not.toThrow()
   })
 
+  it('folds ResourceActivated onto the session row, setting activeResourceId + currentUrl', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const result = applyEvent(created, resourceActivated)
+    expect(result.session).toEqual({
+      id: 's1',
+      title: 'Algebra',
+      status: 'draft',
+      teacherId: 'teacher-1',
+      activeResourceId: 'r1',
+      currentUrl: 'https://example.com/slides',
+    })
+  })
+
+  it('folds ResourceActivated with no prior session into a minimal session (tolerant)', () => {
+    const result = applyEvent(emptyProjection('s1'), resourceActivated)
+    expect(result.session).toEqual({
+      id: 's1',
+      title: '',
+      status: '',
+      teacherId: '',
+      activeResourceId: 'r1',
+      currentUrl: 'https://example.com/slides',
+    })
+  })
+
+  it('switching the active resource overwrites activeResourceId + currentUrl', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const first = applyEvent(created, resourceActivated)
+    const second = applyEvent(first, resourceActivated2)
+    expect(second.session?.activeResourceId).toBe('r2')
+    expect(second.session?.currentUrl).toBe('https://example.com/handout.pdf')
+  })
+
+  it('re-folding the same ResourceActivated reproduces the identical session (idempotent)', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const once = applyEvent(created, resourceActivated)
+    const twice = applyEvent(once, resourceActivated)
+    expect(twice.session).toEqual(once.session)
+  })
+
+  it('does not throw on ResourceActivated (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), resourceActivated)).not.toThrow()
+  })
+
+  it('does not mutate the input projection when folding a ResourceActivated', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    applyEvent(created, resourceActivated)
+    expect(created.session).not.toHaveProperty('activeResourceId')
+  })
+
   it('surfaces an unknown event type instead of dropping it', () => {
     const unknown: EventLike = {
       id: 'evt-x',
@@ -616,6 +690,36 @@ describe('rebuildSessionProjection determinism', () => {
       createdAt: 10000,
     })
     expect(inOrder.resources.r2.sortOrder).toBe(1)
+  })
+
+  it('reproduces the active-resource state from a log containing ResourceActivated', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      resourceQueued,
+      resourceActivated,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      resourceActivated,
+      resourceQueued,
+      sessionStarted,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    expect(inOrder.session?.activeResourceId).toBe('r1')
+    expect(inOrder.session?.currentUrl).toBe('https://example.com/slides')
+  })
+
+  it('reproduces the final active resource after a switch (R1 → R2)', () => {
+    const result = rebuildSessionProjection('s1', [
+      sessionCreated,
+      resourceQueued,
+      resourceQueued2,
+      resourceActivated,
+      resourceActivated2,
+    ])
+    expect(result.session?.activeResourceId).toBe('r2')
+    expect(result.session?.currentUrl).toBe('https://example.com/handout.pdf')
   })
 
   it('orders by occurredAt, then receivedAt, then id (§17.1)', () => {

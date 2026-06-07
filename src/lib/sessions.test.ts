@@ -28,8 +28,12 @@ import {
   buildResourceQueue,
   queueResource,
   defaultResourceTxn,
+  buildResourceActivate,
+  activateResource,
+  defaultResourceActivateTxn,
   type SessionListRow,
   type SessionResourceRecord,
+  type ResourceActivatePlan,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -1242,5 +1246,171 @@ describe('defaultResourceTxn (real projection txn, cycle 0015)', () => {
       embedStatus: 'unchecked',
       sortOrder: 0,
     })
+  })
+})
+
+describe('buildResourceActivate (cycle 0016)', () => {
+  const resources = [
+    { id: 'r1', sessionId: 's1', url: 'https://example.com/slides' },
+    { id: 'r2', sessionId: 's1', url: 'https://example.com/form' },
+    { id: 'rX', sessionId: 's-other', url: 'https://example.com/foreign' },
+  ]
+  const okInput = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    actor: { id: 'teacher-1', role: 'teacher' },
+    resources,
+  }
+
+  it('produces the plan + ResourceActivated envelope with derived currentUrl on valid input', () => {
+    const plan = buildResourceActivate(okInput)
+    expect(plan).toEqual({
+      sessionId: 's1',
+      resourceId: 'r1',
+      currentUrl: 'https://example.com/slides',
+      meta: {
+        sessionId: 's1',
+        actor: { id: 'teacher-1', role: 'teacher' },
+        payload: { sessionId: 's1', resourceId: 'r1', currentUrl: 'https://example.com/slides' },
+      },
+    })
+  })
+
+  it('hard-sets the envelope actor.role to teacher', () => {
+    const plan = buildResourceActivate(okInput)
+    expect(plan.meta.actor).toEqual({ id: 'teacher-1', role: 'teacher' })
+  })
+
+  it('derives currentUrl from the target resource (not another row)', () => {
+    expect(buildResourceActivate({ ...okInput, resourceId: 'r2' }).currentUrl).toBe(
+      'https://example.com/form'
+    )
+  })
+
+  it('throws on a non-teacher actor (before any plan)', () => {
+    expect(() =>
+      buildResourceActivate({ ...okInput, actor: { id: 'u1', role: 'student' } })
+    ).toThrow(/only a teacher/)
+  })
+
+  it('throws on a missing actor id', () => {
+    expect(() =>
+      buildResourceActivate({ ...okInput, actor: { id: null, role: 'teacher' } })
+    ).toThrow(/actor userId is required/)
+  })
+
+  it('throws on a missing sessionId', () => {
+    expect(() => buildResourceActivate({ ...okInput, sessionId: null })).toThrow(
+      /sessionId is required/
+    )
+  })
+
+  it('throws on a missing resourceId', () => {
+    expect(() => buildResourceActivate({ ...okInput, resourceId: null })).toThrow(
+      /resourceId is required/
+    )
+  })
+
+  it('throws when the resource is not found in the session queue', () => {
+    expect(() => buildResourceActivate({ ...okInput, resourceId: 'nope' })).toThrow(
+      /does not belong to this session/
+    )
+  })
+
+  it('throws when the resource belongs to a different session (foreign)', () => {
+    expect(() => buildResourceActivate({ ...okInput, resourceId: 'rX' })).toThrow(
+      /does not belong to this session/
+    )
+  })
+
+  it('throws when the resource has a blank/missing url', () => {
+    const withBlank = [{ id: 'r1', sessionId: 's1', url: '   ' }]
+    expect(() => buildResourceActivate({ ...okInput, resources: withBlank })).toThrow(
+      /resource has no url/
+    )
+  })
+})
+
+describe('activateResource (cycle 0016)', () => {
+  const resources = [{ id: 'r1', sessionId: 's1', url: 'https://example.com/slides' }]
+  const okInput = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+    resources,
+  }
+
+  it('dual-writes ResourceActivated with exactly one projection txn', async () => {
+    let calledType: string | null = null
+    let calledTxnCount = -1
+    const write = (type: string, _meta: unknown, txns: unknown[]) => {
+      calledType = type
+      calledTxnCount = txns.length
+      return Promise.resolve()
+    }
+    const buildTxn = (p: ResourceActivatePlan) => ({ marker: p.resourceId }) as never
+    const plan = await activateResource(okInput, { write: write as never, buildTxn })
+    expect(calledType).toBe('ResourceActivated')
+    expect(calledTxnCount).toBe(1)
+    expect(plan.resourceId).toBe('r1')
+    expect(plan.currentUrl).toBe('https://example.com/slides')
+  })
+
+  it('does not write when the builder rejects a non-teacher actor (no txn)', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      activateResource(
+        { ...okInput, actor: { id: 'u1', role: 'student' } as never },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/only a teacher/)
+    expect(called).toBe(false)
+  })
+
+  it('does not catch a rejecting write — the rejection propagates', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      activateResource(okInput, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('defaultResourceActivateTxn (real projection txn, cycle 0016)', () => {
+  // The activateResource wrapper tests stub `buildTxn`, so they never exercise
+  // the real txn body. This invokes the real builder and pins that it keys the
+  // session row and sets activeResourceId + currentUrl with NO link op (the
+  // session row already exists — unlike the resource-create txn).
+  const plan: ResourceActivatePlan = {
+    sessionId: 's1',
+    resourceId: 'r1',
+    currentUrl: 'https://example.com/slides',
+    meta: {
+      sessionId: 's1',
+      actor: { id: 'teacher-1', role: 'teacher' },
+      payload: { sessionId: 's1', resourceId: 'r1', currentUrl: 'https://example.com/slides' },
+    },
+  }
+
+  it('keys the sessions row and sets activeResourceId + currentUrl', () => {
+    const txn = defaultResourceActivateTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const updateOp = txn.__ops.find((op) => op[0] === 'update')
+    expect(updateOp![2]).toBe('s1')
+    expect(updateOp![3]).toEqual({
+      activeResourceId: 'r1',
+      currentUrl: 'https://example.com/slides',
+    })
+  })
+
+  it('emits no link op (the session row already exists)', () => {
+    const txn = defaultResourceActivateTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    expect(txn.__ops.find((op) => op[0] === 'link')).toBeUndefined()
   })
 })

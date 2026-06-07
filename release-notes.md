@@ -1,5 +1,30 @@
 # Release Notes
 
+## Cycle 0016 — Activate a resource and render it for teacher + students
+
+- **New: teachers can now activate a queued resource and every student sees it
+  live.** On the session facilitation view (`/dashboard/sessions/<id>`), each
+  queued resource row has an **Activate** button. Clicking it puts that resource
+  in front of the room: the teacher's own view and every connected student's view
+  (`/s/<joinCode>`) immediately render the resource in an embedded pane — no
+  reload, no link to paste. Activating a different resource switches every view in
+  realtime, and a student who joins after activation lands directly on the current
+  resource. This is the first time a teacher action visibly drives what students
+  see. The active row is marked and its button reads **Active**; before anything is
+  activated, both panes show an explicit "no active resource yet" state rather than
+  a blank region.
+- **Under the hood:** activation writes a replayable `ResourceActivated` event
+  together with the session's `activeResourceId` + a new derived `currentUrl` in
+  one transaction (a rejected write leaves the active resource unchanged — no
+  orphan event). The resource renders in a **sandboxed iframe** (no same-origin
+  escalation). Activation is admitted only for the owning teacher (the build-time
+  role/belonging check plus the existing owner-only-write rule); a non-teacher
+  attempt writes nothing.
+- **Schema push required:** this cycle adds an additive `sessions.currentUrl`
+  field — run `npx instant-cli push schema` before the feature works against the
+  live app. **No permission push** is needed (it inherits the existing `sessions`
+  owner-only-write rule).
+
 ## Cycle 0015 — Teacher queues a resource (with URL validation)
 
 - **New: teachers can now queue lesson resources on a session.** On the session

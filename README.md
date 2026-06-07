@@ -274,9 +274,31 @@ successful add writes a replayable `ResourceQueued` event together with the
 `sessionResources` row in one transaction, and a rejected write surfaces an inline
 error while keeping your entered values for retry. No schema or permission push is
 required this cycle (the `sessionResources` entity and its owner-only-write rule
-already exist; no new `.env` keys). Reordering, removing, activating, and
-embed-checking resources arrive in later cycles. The e2e suite is
-`e2e/queue-resource.spec.ts`.
+already exist; no new `.env` keys). Reordering, removing, and embed-checking
+resources arrive in later cycles. The e2e suite is `e2e/queue-resource.spec.ts`.
+
+## Activating a resource (teacher → students)
+
+Each queued resource row now has an **Activate** button. Clicking it puts that
+resource in front of the room: the teacher's own facilitation view **and** every
+connected student view (`/s/<joinCode>`) immediately render the resource in an
+embedded pane — **no reload**, no link to paste. Activating a different resource
+switches every view in **realtime**, and a student who joins after activation
+lands directly on the current resource. The active row is marked and its button
+reads **Active**; before anything is activated, both panes show an explicit
+"no active resource yet" state rather than a blank region.
+
+The resource renders in a **sandboxed iframe** (no same-origin escalation; some
+sites refuse to embed — a blocked-embed fallback is a later cycle). Activation is
+admitted only for the owning teacher: each activation writes a replayable
+`ResourceActivated` event together with the session's `activeResourceId` + a
+derived `currentUrl` in one transaction (a rejected write leaves the active
+resource unchanged), and a non-teacher attempt writes nothing.
+
+**Schema push required:** this cycle adds an additive `sessions.currentUrl`
+field — run `npx instant-cli push schema` before the feature works against the
+live app. **No permission push** is needed (it inherits the existing `sessions`
+owner-only-write rule). The e2e suite is `e2e/activate-resource.spec.ts`.
 
 ### Known limitations
 
@@ -357,6 +379,20 @@ embed-checking resources arrive in later cycles. The e2e suite is
   write, not the query itself, so a teacher whose query is failing can wrongly
   assume nothing has been asked. A future cycle should route `qq.error` to the
   alert surface and suppress the empty-state copy.
+- **An activated resource that refuses to be framed renders as a broken pane.**
+  `ResourcePane` points a sandboxed iframe straight at the active `currentUrl`
+  with no blocked-embed fallback — a site that denies framing
+  (`X-Frame-Options`/CSP) shows a blank or browser-error frame rather than a
+  graceful "this resource can't be embedded" message. `embedMode` stays
+  `'blocked'` as queued and is not consulted yet; the embed-checking fallback is
+  a later cycle.
+- The **resource-activation** dual-write, the live cross-context pane sync, and
+  the per-row Activate control are exercised end-to-end only by
+  `e2e/activate-resource.spec.ts`, which skips (loudly, but green) when
+  `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure core
+  (`buildResourceActivate`, the `ResourceActivated` fold, `rebuildSessionProjection`)
+  is fully unit-covered, but the live `activateResource` write and the cycle-0003
+  owner-only-write backstop have no runnable gate until admin env is provisioned.
 
 ## Resources
 

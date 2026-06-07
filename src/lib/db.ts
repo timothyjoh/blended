@@ -55,6 +55,11 @@ export const schema = i.schema({
       startedAt: i.number().optional(),
       endedAt: i.number().optional(),
       activeResourceId: i.string().optional(),
+      // Cycle 0016: derived URL of the active resource, set alongside
+      // `activeResourceId` by the `ResourceActivated` dual-write so the shared
+      // ResourcePane can render from the single session row (no resources query
+      // needed in the student view). Additive — requires `instant-cli push schema`.
+      currentUrl: i.string().optional(),
       interactionMode: i.string<'none' | 'cursor_vote'>(),
     }),
     sessionResources: i.entity({
@@ -226,7 +231,15 @@ export type EventLike = {
 
 export type SessionProjection = {
   sessionId: string
-  session: { id: string; title: string; status: string; teacherId: string } | null
+  session: {
+    id: string
+    title: string
+    status: string
+    teacherId: string
+    // Cycle 0016: set by the `ResourceActivated` fold.
+    activeResourceId?: string
+    currentUrl?: string
+  } | null
   participants: Record<string, { id: string; userId: string; role: string; username: string }>
   messages: Record<string, { id: string; participantId: string; text: string; createdAt: number }>
   // Cycle 0009: teacher-facing Questions promoted from question-like messages.
@@ -476,6 +489,36 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
             createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
           },
         },
+      }
+    }
+    case 'ResourceActivated': {
+      // Cycle 0016: a teacher activates a queued resource. Set the session's
+      // `activeResourceId` + derived `currentUrl`. Mirrors the lifecycle cases
+      // (`SessionStarted`/`SessionEnded`): mutate the existing session row,
+      // tolerate an absent prior session by building a minimal one from the
+      // payload, never mutate input, and re-fold convergently (the keyed update
+      // reproduces the same values). Keeps `rebuildSessionProjection` whole —
+      // `ResourceActivated` never reaches the `default`.
+      const p = event.payload as {
+        sessionId?: string
+        resourceId?: string
+        currentUrl?: string
+      }
+      const prev = projection.session
+      const activeResourceId = typeof p.resourceId === 'string' ? p.resourceId : undefined
+      const currentUrl = typeof p.currentUrl === 'string' ? p.currentUrl : undefined
+      return {
+        ...projection,
+        session: prev
+          ? { ...prev, activeResourceId, currentUrl }
+          : {
+              id: p.sessionId ?? projection.sessionId,
+              title: '',
+              status: '',
+              teacherId: '',
+              activeResourceId,
+              currentUrl,
+            },
       }
     }
     default:

@@ -3,7 +3,7 @@ id: refl-0015-add-resource-before-queue-query-loads-mi
 source: reflection
 title: add-resource-before-queue-query-loads-mis-computes-sortorder
 added_at: 2026-06-07T10:41:51.760Z
-triage_attempts: 0
+triage_attempts: 1
 priority: medium
 origin_cycle_id: "0015"
 ---

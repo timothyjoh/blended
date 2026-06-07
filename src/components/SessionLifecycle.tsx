@@ -7,11 +7,13 @@ import {
   isJoinEnabled,
   answerQuestion,
   queueResource,
+  activateResource,
   RESOURCE_TYPES,
 } from '@/lib/sessions'
 import { validateResourceUrl } from '@/lib/resources'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import ResourcePane from './ResourcePane'
 
 // ---------------------------------------------------------------------------
 // Session lifecycle controls (cycle 0006). Mounted inside `SessionRouteGuard` on
@@ -55,7 +57,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 // inline alert checked BEFORE the empty state (an errored query never reads as
 // falsely-empty); a rejected write surfaces inline and retains the entered values
 // for retry; a per-submit pending latch suppresses a double-submit. Reorder/remove/
-// activate/embed-check are deferred to sibling cycles.
+// embed-check are deferred to sibling cycles.
+//
+// Cycle 0016: each queued resource row carries an **Activate** control routing the
+// sole sanctioned `activateResource` → a `ResourceActivated` dual-write that sets
+// the session's `activeResourceId` + derived `currentUrl` in one transaction. The
+// active row is marked `data-active="true"` and its button reads "Active" + is
+// disabled. The shared `ResourcePane` (also mounted in the student view) renders
+// the active resource in a sandboxed iframe from the live session row, switching
+// live with no reload; before any activation it shows an explicit empty state. A
+// failed activation surfaces inline (`role="alert"`) + `console.error`, leaving the
+// live row unchanged; a per-row pending latch suppresses a double-submit.
 // ---------------------------------------------------------------------------
 
 export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
@@ -85,6 +97,11 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
   const [resType, setResType] = useState<string>('generic_url')
   const [resError, setResError] = useState<string | null>(null)
   const [resPending, setResPending] = useState(false)
+
+  // Cycle 0016: per-row activation. A pending latch (the resource id in flight)
+  // suppresses a double-submit; a dedicated error string surfaces inline.
+  const [activatingId, setActivatingId] = useState<string | null>(null)
+  const [activateError, setActivateError] = useState<string | null>(null)
 
   // Query errors: surface them (never swallow). The controls are gated on a
   // loaded session below, so a failed query renders the non-actionable error
@@ -151,6 +168,33 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
       console.error('[SessionLifecycle] add resource failed:', err)
     } finally {
       setResPending(false)
+    }
+  }
+
+  async function activate(resourceId: string) {
+    setActivateError(null)
+    if (!user?.id) {
+      setActivateError('You must be signed in to activate a resource')
+      return
+    }
+    setActivatingId(resourceId)
+    try {
+      // Route the dual-write through the sole sanctioned path. On success the live
+      // session query advances `activeResourceId`/`currentUrl` and the pane re-renders.
+      await activateResource({
+        sessionId,
+        resourceId,
+        actor: { id: user.id, role: 'teacher' },
+        resources,
+      })
+    } catch (err) {
+      // Surface inline + log — never swallowed; the live row is unchanged so the
+      // resource stays activatable for a retry.
+      const message = err instanceof Error ? err.message : String(err)
+      setActivateError(message)
+      console.error('[SessionLifecycle] activate failed:', err)
+    } finally {
+      setActivatingId(null)
     }
   }
 
@@ -328,6 +372,19 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
 
       <Card>
         <CardHeader>
+          <CardTitle>Active resource</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Cycle 0016: the shared pane, driven by the live session row. */}
+          <ResourcePane
+            activeResourceId={session.activeResourceId}
+            currentUrl={session.currentUrl}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Questions</CardTitle>
         </CardHeader>
         <CardContent>
@@ -461,26 +518,52 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
                 No resources queued yet. Add one above and it appears here in real time.
               </p>
             ) : (
-              resources.map((r) => (
-                <div
-                  key={r.id}
-                  data-testid="resource-item"
-                  data-resource-id={r.id}
-                  data-sort-order={r.sortOrder}
-                  className="flex flex-col gap-1 rounded-md border p-3"
-                >
-                  <p data-testid="resource-title" className="text-sm font-medium">
-                    {r.title}
-                  </p>
-                  <p data-testid="resource-url" className="break-all text-xs text-muted-foreground">
-                    {r.url}
-                  </p>
-                  <p data-testid="resource-type" className="text-xs text-muted-foreground">
-                    {r.type}
-                  </p>
-                </div>
-              ))
+              resources.map((r) => {
+                const isActive = session.activeResourceId === r.id
+                return (
+                  <div
+                    key={r.id}
+                    data-testid="resource-item"
+                    data-resource-id={r.id}
+                    data-sort-order={r.sortOrder}
+                    data-active={isActive ? 'true' : undefined}
+                    className="flex flex-col gap-1 rounded-md border p-3"
+                  >
+                    <p data-testid="resource-title" className="text-sm font-medium">
+                      {r.title}
+                    </p>
+                    <p
+                      data-testid="resource-url"
+                      className="break-all text-xs text-muted-foreground"
+                    >
+                      {r.url}
+                    </p>
+                    <p data-testid="resource-type" className="text-xs text-muted-foreground">
+                      {r.type}
+                    </p>
+                    <div className="mt-1">
+                      <Button
+                        data-testid="activate-resource"
+                        variant={isActive ? 'default' : 'outline'}
+                        disabled={resPending || activatingId === r.id || isActive}
+                        onClick={() => activate(r.id)}
+                      >
+                        {isActive ? 'Active' : activatingId === r.id ? 'Activating…' : 'Activate'}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })
             )}
+            {activateError ? (
+              <p
+                data-testid="activate-resource-error"
+                role="alert"
+                className="text-sm text-destructive"
+              >
+                {activateError}
+              </p>
+            ) : null}
           </div>
         </CardContent>
       </Card>
