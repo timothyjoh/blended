@@ -13,9 +13,15 @@
 export default function ResourcePane({
   activeResourceId,
   currentUrl,
+  currentUrlVersion,
 }: {
   activeResourceId?: string | null
   currentUrl?: string | null
+  // Cycle 0017: a fresh per-broadcast token. The iframe is keyed on it so every
+  // broadcast (including re-broadcasting an identical URL) forces a fresh mount,
+  // re-snapping a student who navigated locally inside their iframe. Falls back
+  // to `url` for pre-0017 session rows that carry no version.
+  currentUrlVersion?: string | null
 }) {
   const url = (currentUrl ?? '').trim()
   if (!activeResourceId || url === '') {
@@ -30,8 +36,10 @@ export default function ResourcePane({
   return (
     <div data-testid="resource-pane" className="rounded-md border">
       <iframe
+        key={currentUrlVersion ?? url}
         data-testid="resource-pane-frame"
         data-resource-id={activeResourceId}
+        data-url-version={currentUrlVersion ?? undefined}
         src={url}
         title="Active resource"
         className="h-[60vh] w-full"

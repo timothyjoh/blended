@@ -178,6 +178,7 @@ const resourceActivated: EventLike = {
     sessionId: 's1',
     resourceId: 'r1',
     currentUrl: 'https://example.com/slides',
+    currentUrlVersion: 'ver-act-1',
   },
 }
 
@@ -190,6 +191,32 @@ const resourceActivated2: EventLike = {
     sessionId: 's1',
     resourceId: 'r2',
     currentUrl: 'https://example.com/handout.pdf',
+    currentUrlVersion: 'ver-act-2',
+  },
+}
+
+// Cycle 0017: a teacher broadcasts a new URL position within the active resource.
+const resourceUrlChanged: EventLike = {
+  id: 'evt-22',
+  type: 'ResourceUrlChanged',
+  occurredAt: 22000,
+  receivedAt: 22000,
+  payload: {
+    sessionId: 's1',
+    currentUrl: 'https://example.com/slides/3',
+    currentUrlVersion: 'ver-bc-1',
+  },
+}
+
+const resourceUrlChanged2: EventLike = {
+  id: 'evt-23',
+  type: 'ResourceUrlChanged',
+  occurredAt: 23000,
+  receivedAt: 23000,
+  payload: {
+    sessionId: 's1',
+    currentUrl: 'https://example.com/slides/4',
+    currentUrlVersion: 'ver-bc-2',
   },
 }
 
@@ -452,6 +479,7 @@ describe('applyEvent', () => {
       teacherId: 'teacher-1',
       activeResourceId: 'r1',
       currentUrl: 'https://example.com/slides',
+      currentUrlVersion: 'ver-act-1',
     })
   })
 
@@ -464,6 +492,7 @@ describe('applyEvent', () => {
       teacherId: '',
       activeResourceId: 'r1',
       currentUrl: 'https://example.com/slides',
+      currentUrlVersion: 'ver-act-1',
     })
   })
 
@@ -490,6 +519,91 @@ describe('applyEvent', () => {
     const created = applyEvent(emptyProjection('s1'), sessionCreated)
     applyEvent(created, resourceActivated)
     expect(created.session).not.toHaveProperty('activeResourceId')
+  })
+
+  it('folds ResourceUrlChanged onto the session row, setting currentUrl + currentUrlVersion', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const active = applyEvent(created, resourceActivated)
+    const result = applyEvent(active, resourceUrlChanged)
+    // The active resource is preserved; only the broadcast position moves.
+    expect(result.session).toEqual({
+      id: 's1',
+      title: 'Algebra',
+      status: 'draft',
+      teacherId: 'teacher-1',
+      activeResourceId: 'r1',
+      currentUrl: 'https://example.com/slides/3',
+      currentUrlVersion: 'ver-bc-1',
+    })
+  })
+
+  it('folds ResourceUrlChanged with no prior session into a minimal session (tolerant)', () => {
+    const result = applyEvent(emptyProjection('s1'), resourceUrlChanged)
+    expect(result.session).toEqual({
+      id: 's1',
+      title: '',
+      status: '',
+      teacherId: '',
+      currentUrl: 'https://example.com/slides/3',
+      currentUrlVersion: 'ver-bc-1',
+    })
+  })
+
+  it('each ResourceUrlChanged mints a fresh currentUrlVersion (re-sync key advances)', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const first = applyEvent(applyEvent(created, resourceActivated), resourceUrlChanged)
+    const second = applyEvent(first, resourceUrlChanged2)
+    expect(second.session?.currentUrl).toBe('https://example.com/slides/4')
+    expect(second.session?.currentUrlVersion).toBe('ver-bc-2')
+    expect(second.session?.currentUrlVersion).not.toBe(first.session?.currentUrlVersion)
+  })
+
+  it('re-folding the same ResourceUrlChanged reproduces the identical session (idempotent)', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const once = applyEvent(created, resourceUrlChanged)
+    const twice = applyEvent(once, resourceUrlChanged)
+    expect(twice.session).toEqual(once.session)
+  })
+
+  it('does not throw on ResourceUrlChanged (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), resourceUrlChanged)).not.toThrow()
+  })
+
+  it('type-guards a ResourceUrlChanged payload with non-string fields to undefined', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    const active = applyEvent(created, resourceActivated)
+    const malformed: EventLike = {
+      id: 'evt-bad',
+      type: 'ResourceUrlChanged',
+      occurredAt: 24000,
+      receivedAt: 24000,
+      // Non-string url/version (defensive against a malformed log line).
+      payload: { sessionId: 's1', currentUrl: 42, currentUrlVersion: null },
+    }
+    const result = applyEvent(active, malformed)
+    expect(result.session?.currentUrl).toBeUndefined()
+    expect(result.session?.currentUrlVersion).toBeUndefined()
+    // The active resource is untouched by a malformed broadcast.
+    expect(result.session?.activeResourceId).toBe('r1')
+  })
+
+  it('type-guards a ResourceActivated payload with a non-string currentUrlVersion to undefined', () => {
+    const malformed: EventLike = {
+      id: 'evt-bad2',
+      type: 'ResourceActivated',
+      occurredAt: 25000,
+      receivedAt: 25000,
+      payload: { sessionId: 's1', resourceId: 'r1', currentUrl: 'https://x.test/', currentUrlVersion: 7 },
+    }
+    const result = applyEvent(emptyProjection('s1'), malformed)
+    expect(result.session?.currentUrlVersion).toBeUndefined()
+    expect(result.session?.currentUrl).toBe('https://x.test/')
+  })
+
+  it('does not mutate the input projection when folding a ResourceUrlChanged', () => {
+    const created = applyEvent(emptyProjection('s1'), sessionCreated)
+    applyEvent(created, resourceUrlChanged)
+    expect(created.session).not.toHaveProperty('currentUrl')
   })
 
   it('surfaces an unknown event type instead of dropping it', () => {
@@ -708,6 +822,30 @@ describe('rebuildSessionProjection determinism', () => {
     expect(shuffled).toEqual(inOrder)
     expect(inOrder.session?.activeResourceId).toBe('r1')
     expect(inOrder.session?.currentUrl).toBe('https://example.com/slides')
+  })
+
+  it('reproduces the latest broadcast URL + version over [ResourceActivated, ResourceUrlChanged, ResourceUrlChanged]', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      resourceQueued,
+      resourceActivated,
+      resourceUrlChanged,
+      resourceUrlChanged2,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      resourceUrlChanged2,
+      resourceActivated,
+      resourceUrlChanged,
+      resourceQueued,
+      sessionStarted,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    // Active resource preserved; broadcast position advanced to the latest URL.
+    expect(inOrder.session?.activeResourceId).toBe('r1')
+    expect(inOrder.session?.currentUrl).toBe('https://example.com/slides/4')
+    expect(inOrder.session?.currentUrlVersion).toBe('ver-bc-2')
   })
 
   it('reproduces the final active resource after a switch (R1 → R2)', () => {

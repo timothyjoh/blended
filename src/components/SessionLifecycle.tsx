@@ -8,6 +8,7 @@ import {
   answerQuestion,
   queueResource,
   activateResource,
+  broadcastResourceUrl,
   RESOURCE_TYPES,
 } from '@/lib/sessions'
 import { validateResourceUrl } from '@/lib/resources'
@@ -103,6 +104,13 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [activateError, setActivateError] = useState<string | null>(null)
 
+  // Cycle 0017: teacher current-URL broadcast. A URL draft, a dedicated error
+  // string surfaced inline (never swallowed), and a per-action pending latch that
+  // suppresses a double-submit. Enabled only when a resource is active.
+  const [broadcastUrl, setBroadcastUrl] = useState('')
+  const [broadcastError, setBroadcastError] = useState<string | null>(null)
+  const [broadcastPending, setBroadcastPending] = useState(false)
+
   // Query errors: surface them (never swallow). The controls are gated on a
   // loaded session below, so a failed query renders the non-actionable error
   // state; a failed questions query is logged and the queue stays empty/observable.
@@ -195,6 +203,55 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
       console.error('[SessionLifecycle] activate failed:', err)
     } finally {
       setActivatingId(null)
+    }
+  }
+
+  async function broadcast() {
+    setBroadcastError(null)
+    if (!user?.id) {
+      setBroadcastError('You must be signed in to broadcast a URL')
+      return
+    }
+    if (!session?.activeResourceId) {
+      // Structurally prevented by the disabled control, but guarded in depth.
+      setBroadcastError('Activate a resource before broadcasting a URL')
+      return
+    }
+    // Client-side gate through the SINGLE validation seam BEFORE any write — an
+    // unsafe scheme / blank / unparseable URL is rejected with no
+    // `broadcastResourceUrl` call, the entered value retained.
+    const valid = validateResourceUrl(broadcastUrl)
+    if (!valid.ok) {
+      setBroadcastError(
+        valid.reason === 'unsafe_scheme'
+          ? 'That URL scheme is not allowed. Use an http(s) link.'
+          : valid.reason === 'blank'
+            ? 'Enter a URL.'
+            : 'That URL could not be parsed.'
+      )
+      console.error('[SessionLifecycle] broadcast rejected:', valid.reason)
+      return
+    }
+    setBroadcastPending(true)
+    try {
+      // Route the dual-write through the sole sanctioned path. On success the live
+      // session query advances `currentUrl`/`currentUrlVersion`; the version-keyed
+      // pane remounts for every connected view.
+      await broadcastResourceUrl({
+        sessionId,
+        url: broadcastUrl,
+        actor: { id: user.id, role: 'teacher' },
+        activeResourceId: session.activeResourceId,
+      })
+      // Clear the field only on success; the live query re-syncs the pane.
+      setBroadcastUrl('')
+    } catch (err) {
+      // Surface inline + log — never swallowed; retain the entered URL for retry.
+      const message = err instanceof Error ? err.message : String(err)
+      setBroadcastError(message)
+      console.error('[SessionLifecycle] broadcast failed:', err)
+    } finally {
+      setBroadcastPending(false)
     }
   }
 
@@ -374,11 +431,43 @@ export default function SessionLifecycle({ sessionId }: { sessionId: string }) {
         <CardHeader>
           <CardTitle>Active resource</CardTitle>
         </CardHeader>
-        <CardContent>
-          {/* Cycle 0016: the shared pane, driven by the live session row. */}
+        <CardContent className="flex flex-col gap-3">
+          {/* Cycle 0017: teacher current-URL broadcast control. Always rendered
+              (stable testids) but non-actionable until a resource is active. */}
+          <div data-testid="broadcast-url-control" className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                data-testid="broadcast-url-input"
+                className="flex-1 rounded-md border px-2 py-1 text-sm"
+                placeholder="https://… broadcast the next URL"
+                value={broadcastUrl}
+                disabled={!session.activeResourceId}
+                onChange={(e) => setBroadcastUrl(e.target.value)}
+              />
+              <Button
+                data-testid="broadcast-url-submit"
+                disabled={!session.activeResourceId || broadcastPending}
+                onClick={broadcast}
+              >
+                {broadcastPending ? 'Broadcasting…' : 'Broadcast'}
+              </Button>
+            </div>
+            {broadcastError ? (
+              <p
+                data-testid="broadcast-url-error"
+                role="alert"
+                className="text-sm text-destructive"
+              >
+                {broadcastError}
+              </p>
+            ) : null}
+          </div>
+          {/* Cycle 0016: the shared pane, driven by the live session row.
+              Cycle 0017: version-keyed so each broadcast remounts the iframe. */}
           <ResourcePane
             activeResourceId={session.activeResourceId}
             currentUrl={session.currentUrl}
+            currentUrlVersion={session.currentUrlVersion}
           />
         </CardContent>
       </Card>

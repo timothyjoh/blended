@@ -31,9 +31,14 @@ import {
   buildResourceActivate,
   activateResource,
   defaultResourceActivateTxn,
+  generateUrlVersion,
+  buildResourceUrlChange,
+  broadcastResourceUrl,
+  defaultResourceUrlChangeTxn,
   type SessionListRow,
   type SessionResourceRecord,
   type ResourceActivatePlan,
+  type ResourceUrlChangePlan,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -1260,6 +1265,8 @@ describe('buildResourceActivate (cycle 0016)', () => {
     resourceId: 'r1',
     actor: { id: 'teacher-1', role: 'teacher' },
     resources,
+    // Cycle 0017: pin the per-activation version token for a deterministic plan.
+    version: 'ver-act-1',
   }
 
   it('produces the plan + ResourceActivated envelope with derived currentUrl on valid input', () => {
@@ -1268,12 +1275,25 @@ describe('buildResourceActivate (cycle 0016)', () => {
       sessionId: 's1',
       resourceId: 'r1',
       currentUrl: 'https://example.com/slides',
+      currentUrlVersion: 'ver-act-1',
       meta: {
         sessionId: 's1',
         actor: { id: 'teacher-1', role: 'teacher' },
-        payload: { sessionId: 's1', resourceId: 'r1', currentUrl: 'https://example.com/slides' },
+        payload: {
+          sessionId: 's1',
+          resourceId: 'r1',
+          currentUrl: 'https://example.com/slides',
+          currentUrlVersion: 'ver-act-1',
+        },
       },
     })
+  })
+
+  it('stamps a fresh currentUrlVersion when none is injected (mints per activation)', () => {
+    const a = buildResourceActivate({ ...okInput, version: undefined })
+    const b = buildResourceActivate({ ...okInput, version: undefined })
+    expect(a.currentUrlVersion).toBeTruthy()
+    expect(a.currentUrlVersion).not.toBe(b.currentUrlVersion)
   })
 
   it('hard-sets the envelope actor.role to teacher', () => {
@@ -1388,14 +1408,20 @@ describe('defaultResourceActivateTxn (real projection txn, cycle 0016)', () => {
     sessionId: 's1',
     resourceId: 'r1',
     currentUrl: 'https://example.com/slides',
+    currentUrlVersion: 'ver-act-1',
     meta: {
       sessionId: 's1',
       actor: { id: 'teacher-1', role: 'teacher' },
-      payload: { sessionId: 's1', resourceId: 'r1', currentUrl: 'https://example.com/slides' },
+      payload: {
+        sessionId: 's1',
+        resourceId: 'r1',
+        currentUrl: 'https://example.com/slides',
+        currentUrlVersion: 'ver-act-1',
+      },
     },
   }
 
-  it('keys the sessions row and sets activeResourceId + currentUrl', () => {
+  it('keys the sessions row and sets activeResourceId + currentUrl + currentUrlVersion', () => {
     const txn = defaultResourceActivateTxn(plan) as unknown as {
       __ops: [string, string, string, Record<string, unknown>][]
     }
@@ -1404,11 +1430,216 @@ describe('defaultResourceActivateTxn (real projection txn, cycle 0016)', () => {
     expect(updateOp![3]).toEqual({
       activeResourceId: 'r1',
       currentUrl: 'https://example.com/slides',
+      currentUrlVersion: 'ver-act-1',
     })
   })
 
   it('emits no link op (the session row already exists)', () => {
     const txn = defaultResourceActivateTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    expect(txn.__ops.find((op) => op[0] === 'link')).toBeUndefined()
+  })
+})
+
+describe('generateUrlVersion (cycle 0017)', () => {
+  it('returns the injected mint value (deterministic under a stub)', () => {
+    expect(generateUrlVersion(() => 'ver-xyz')).toBe('ver-xyz')
+  })
+
+  it('two successive real-mint calls differ (unguessable, never collide)', () => {
+    expect(generateUrlVersion()).not.toBe(generateUrlVersion())
+  })
+})
+
+describe('buildResourceUrlChange (cycle 0017)', () => {
+  const okInput = {
+    sessionId: 's1',
+    actor: { id: 'teacher-1', role: 'teacher' },
+    url: 'https://example.com/slides/3',
+    activeResourceId: 'r1',
+    version: 'ver-1',
+  }
+
+  it('produces the plan + ResourceUrlChanged envelope on valid input', () => {
+    const plan = buildResourceUrlChange(okInput)
+    expect(plan).toEqual({
+      sessionId: 's1',
+      currentUrl: 'https://example.com/slides/3',
+      currentUrlVersion: 'ver-1',
+      meta: {
+        sessionId: 's1',
+        actor: { id: 'teacher-1', role: 'teacher' },
+        payload: {
+          sessionId: 's1',
+          currentUrl: 'https://example.com/slides/3',
+          currentUrlVersion: 'ver-1',
+        },
+      },
+    })
+  })
+
+  it('hard-sets the envelope actor.role to teacher', () => {
+    expect(buildResourceUrlChange(okInput).meta.actor).toEqual({
+      id: 'teacher-1',
+      role: 'teacher',
+    })
+  })
+
+  it('normalizes the URL through the validateResourceUrl seam', () => {
+    // `validateResourceUrl` returns `parsed.href`, which appends a trailing slash
+    // to an origin-only URL — proves the seam (not inline parsing) produced it.
+    expect(buildResourceUrlChange({ ...okInput, url: 'https://example.com' }).currentUrl).toBe(
+      'https://example.com/'
+    )
+  })
+
+  it('mints a fresh distinct currentUrlVersion per call when none is injected', () => {
+    const a = buildResourceUrlChange({ ...okInput, version: undefined })
+    const b = buildResourceUrlChange({ ...okInput, version: undefined })
+    expect(a.currentUrlVersion).toBeTruthy()
+    expect(a.currentUrlVersion).not.toBe(b.currentUrlVersion)
+  })
+
+  it('throws on a non-teacher actor (before any plan)', () => {
+    expect(() =>
+      buildResourceUrlChange({ ...okInput, actor: { id: 'u1', role: 'student' } })
+    ).toThrow(/only a teacher/)
+  })
+
+  it('throws on a missing actor id', () => {
+    expect(() =>
+      buildResourceUrlChange({ ...okInput, actor: { id: null, role: 'teacher' } })
+    ).toThrow(/actor userId is required/)
+  })
+
+  it('throws on a missing sessionId', () => {
+    expect(() => buildResourceUrlChange({ ...okInput, sessionId: null })).toThrow(
+      /sessionId is required/
+    )
+  })
+
+  it('throws when no resource is active (broadcast is illegal without one)', () => {
+    expect(() => buildResourceUrlChange({ ...okInput, activeResourceId: null })).toThrow(
+      /no active resource/
+    )
+    expect(() => buildResourceUrlChange({ ...okInput, activeResourceId: '   ' })).toThrow(
+      /no active resource/
+    )
+  })
+
+  it('throws on a blank URL (validateResourceUrl rejection)', () => {
+    expect(() => buildResourceUrlChange({ ...okInput, url: '   ' })).toThrow(
+      /broadcastResourceUrl: blank/
+    )
+  })
+
+  it('throws on an unsafe scheme (validateResourceUrl rejection)', () => {
+    expect(() =>
+      buildResourceUrlChange({ ...okInput, url: 'javascript:alert(1)' })
+    ).toThrow(/broadcastResourceUrl: unsafe_scheme/)
+  })
+
+  it('throws on an unparseable URL (validateResourceUrl rejection)', () => {
+    expect(() => buildResourceUrlChange({ ...okInput, url: 'not a url' })).toThrow(
+      /broadcastResourceUrl: unparseable/
+    )
+  })
+})
+
+describe('broadcastResourceUrl (cycle 0017)', () => {
+  const okInput = {
+    sessionId: 's1',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+    url: 'https://example.com/slides/3',
+    activeResourceId: 'r1',
+    version: 'ver-1',
+  }
+
+  it('dual-writes ResourceUrlChanged with exactly one projection txn', async () => {
+    let calledType: string | null = null
+    let calledTxnCount = -1
+    const write = (type: string, _meta: unknown, txns: unknown[]) => {
+      calledType = type
+      calledTxnCount = txns.length
+      return Promise.resolve()
+    }
+    const buildTxn = (p: ResourceUrlChangePlan) => ({ marker: p.currentUrlVersion }) as never
+    const plan = await broadcastResourceUrl(okInput, { write: write as never, buildTxn })
+    expect(calledType).toBe('ResourceUrlChanged')
+    expect(calledTxnCount).toBe(1)
+    expect(plan.currentUrl).toBe('https://example.com/slides/3')
+    expect(plan.currentUrlVersion).toBe('ver-1')
+  })
+
+  it('does not write when the builder rejects a non-teacher actor (no txn)', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      broadcastResourceUrl(
+        { ...okInput, actor: { id: 'u1', role: 'student' } as never },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/only a teacher/)
+    expect(called).toBe(false)
+  })
+
+  it('does not write when the builder rejects a blank URL (no txn)', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      broadcastResourceUrl(
+        { ...okInput, url: '   ' },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/broadcastResourceUrl: blank/)
+    expect(called).toBe(false)
+  })
+
+  it('does not catch a rejecting write — the rejection propagates', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      broadcastResourceUrl(okInput, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('defaultResourceUrlChangeTxn (real projection txn, cycle 0017)', () => {
+  const plan: ResourceUrlChangePlan = {
+    sessionId: 's1',
+    currentUrl: 'https://example.com/slides/3',
+    currentUrlVersion: 'ver-1',
+    meta: {
+      sessionId: 's1',
+      actor: { id: 'teacher-1', role: 'teacher' },
+      payload: {
+        sessionId: 's1',
+        currentUrl: 'https://example.com/slides/3',
+        currentUrlVersion: 'ver-1',
+      },
+    },
+  }
+
+  it('keys the sessions row and sets currentUrl + currentUrlVersion (no activeResourceId)', () => {
+    const txn = defaultResourceUrlChangeTxn(plan) as unknown as {
+      __ops: [string, string, string, Record<string, unknown>][]
+    }
+    const updateOp = txn.__ops.find((op) => op[0] === 'update')
+    expect(updateOp![2]).toBe('s1')
+    expect(updateOp![3]).toEqual({
+      currentUrl: 'https://example.com/slides/3',
+      currentUrlVersion: 'ver-1',
+    })
+  })
+
+  it('emits no link op (the session row already exists)', () => {
+    const txn = defaultResourceUrlChangeTxn(plan) as unknown as {
       __ops: [string, string, string, Record<string, unknown>][]
     }
     expect(txn.__ops.find((op) => op[0] === 'link')).toBeUndefined()

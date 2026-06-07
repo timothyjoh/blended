@@ -300,6 +300,33 @@ field — run `npx instant-cli push schema` before the feature works against the
 live app. **No permission push** is needed (it inherits the existing `sessions`
 owner-only-write rule). The e2e suite is `e2e/activate-resource.spec.ts`.
 
+## Broadcasting a URL — students follow + re-sync (teacher → students)
+
+Once a resource is active, the facilitation view shows a **broadcast control** — a
+URL field + a **Broadcast** button — above the resource pane. Type or paste the
+next slide's URL (e.g. `…/slides/4`) and click **Broadcast**: every connected
+student's pane snaps to that URL in **realtime**, with no reload and no link to
+paste. This is the first time a teacher can advance the room *through* a resource
+(slide 3 → slide 4) rather than only choosing which resource is shown.
+
+A student who has clicked or scrolled away inside their own iframe is **pulled
+back** to the teacher's position on the very next broadcast — even when the teacher
+re-broadcasts the *same* URL the student wandered from (each broadcast remounts the
+shared frame). A student who joins late lands directly on the teacher's current
+broadcast position, not the resource's first page.
+
+A blank, unsafe, or unparseable URL is rejected inline before anything is written
+(reusing the same URL-safety check as queuing); the control is disabled until a
+resource is active; and a non-teacher has no broadcast control at all. Each
+broadcast writes a replayable `ResourceUrlChanged` event together with the
+session's `currentUrl` + a fresh `currentUrlVersion` token in one transaction (a
+rejected write leaves the broadcast position unchanged).
+
+**Schema push required:** this cycle adds an additive `sessions.currentUrlVersion`
+field — run `npx instant-cli push schema` before the feature works against the
+live app. **No permission push** is needed (it inherits the existing `sessions`
+owner-only-write rule). The e2e suite is `e2e/broadcast-resource-url.spec.ts`.
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed

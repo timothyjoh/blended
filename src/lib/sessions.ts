@@ -43,6 +43,19 @@ export function generateJoinCode(randomBytes: RandomBytes = defaultRandomBytes):
   return code
 }
 
+/**
+ * Cycle 0017: injectable per-broadcast version-token source. A `Mint` returns a
+ * fresh unguessable unique token; production defaults to `id` from
+ * `@instantdb/react` (the same source already minting session/participant/
+ * resource ids), so two broadcasts never collide and NO read-before-write is
+ * required. Tests inject a deterministic stub. Mirrors the `generateJoinCode`
+ * injectable-RNG pattern so the pure core stays deterministic under test.
+ */
+export type Mint = () => string
+export function generateUrlVersion(mint: Mint = id): string {
+  return mint()
+}
+
 /** The `sessions` projection row this cycle writes — always a fresh `draft`. */
 export type SessionRecord = {
   id: string
@@ -966,6 +979,9 @@ export type BuildResourceActivateInput = {
   // The session's queued resources from the component's live query, used to
   // confirm the target belongs to the session and to derive `currentUrl`.
   resources: ReadonlyArray<{ id: string; sessionId: string; url: string }>
+  // Cycle 0017: injectable per-broadcast version token (deterministic in tests);
+  // production omits it and the builder mints via `generateUrlVersion()`.
+  version?: string
   now?: number
 }
 
@@ -973,6 +989,7 @@ export type ResourceActivatePlan = {
   sessionId: string
   resourceId: string
   currentUrl: string
+  currentUrlVersion: string
   meta: WriteEventMeta
 }
 
@@ -1000,18 +1017,22 @@ export function buildResourceActivate(input: BuildResourceActivateInput): Resour
   const currentUrl = (resource.url ?? '').trim()
   if (currentUrl === '') throw new Error('activateResource: resource has no url')
 
+  // Cycle 0017: activation also stamps a fresh `currentUrlVersion` so activation
+  // and broadcast share one re-sync key the ResourcePane iframe is keyed on.
+  const currentUrlVersion = input.version ?? generateUrlVersion()
   const meta: WriteEventMeta = {
     sessionId,
     actor: { id: teacherId, role: 'teacher' },
-    payload: { sessionId, resourceId, currentUrl },
+    payload: { sessionId, resourceId, currentUrl, currentUrlVersion },
   }
-  return { sessionId, resourceId, currentUrl, meta }
+  return { sessionId, resourceId, currentUrl, currentUrlVersion, meta }
 }
 
 export const defaultResourceActivateTxn = (plan: ResourceActivatePlan): ProjectionTxn =>
   db.tx.sessions[plan.sessionId].update({
     activeResourceId: plan.resourceId,
     currentUrl: plan.currentUrl,
+    currentUrlVersion: plan.currentUrlVersion,
   })
 
 export type ActivateResourceDeps = {
@@ -1037,5 +1058,108 @@ export async function activateResource(
   const write = deps.write ?? writeEvent
   const buildTxn = deps.buildTxn ?? defaultResourceActivateTxn
   await write('ResourceActivated', plan.meta, [buildTxn(plan)])
+  return plan
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 0017: Broadcast a resource URL — the SOLE sanctioned URL-broadcast path.
+// A teacher advances the room's position WITHIN an active resource by broadcasting
+// a new URL; we dual-write a `ResourceUrlChanged` event and set
+// `sessions[id].currentUrl` + a fresh per-broadcast `currentUrlVersion` token in
+// ONE transaction (ADR-0001/ADR-0003). Mirrors the cycle-0016 activation path
+// exactly: a pure total builder that throws BEFORE producing any plan, a thin
+// wrapper routing the dual-write through `writeEvent`, and an exported default
+// txn. Broadcast is only legal for a session with an active resource. The URL is
+// validated through the SINGLE `validateResourceUrl` seam (no inline parsing).
+// The per-broadcast version token is minted (not read-before-write), so two
+// broadcasts never collide and re-broadcasting the SAME URL still re-syncs a
+// locally-navigated student (the iframe is keyed on the fresh token).
+// ---------------------------------------------------------------------------
+
+export type BuildResourceUrlChangeInput = {
+  sessionId: string | null | undefined
+  actor: { id: string | null | undefined; role: string }
+  url: string | null | undefined
+  // The live session's active resource id (from the component's live query),
+  // present iff a resource is active. Broadcast is rejected when absent.
+  activeResourceId: string | null | undefined
+  // Cycle 0017: injectable per-broadcast version token (deterministic in tests);
+  // production omits it and the builder mints via `generateUrlVersion()`.
+  version?: string
+}
+
+export type ResourceUrlChangePlan = {
+  sessionId: string
+  currentUrl: string
+  currentUrlVersion: string
+  meta: WriteEventMeta
+}
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A non-teacher actor,
+ * a missing `actor.id`/`sessionId`, an absent `activeResourceId` (broadcast is
+ * only legal with an active resource), or a `validateResourceUrl`-rejected URL is
+ * rejected by throwing synchronously — so nothing is ever written for an invalid
+ * broadcast. Reuses the SINGLE `validateResourceUrl` seam (no inline scheme/`URL`
+ * parsing). Mints a fresh `currentUrlVersion` per call. The envelope hard-sets
+ * `actor.role: 'teacher'`. The payload carries `sessionId`/`currentUrl`/
+ * `currentUrlVersion` so it folds cleanly through `applyEvent`'s
+ * `ResourceUrlChanged` case.
+ */
+export function buildResourceUrlChange(
+  input: BuildResourceUrlChangeInput
+): ResourceUrlChangePlan {
+  if (input.actor?.role !== 'teacher')
+    throw new Error('broadcastResourceUrl: only a teacher may broadcast a url')
+  const teacherId = input.actor?.id
+  if (!teacherId) throw new Error('broadcastResourceUrl: an actor userId is required')
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('broadcastResourceUrl: a sessionId is required')
+  const activeResourceId = (input.activeResourceId ?? '').trim()
+  if (activeResourceId === '')
+    throw new Error('broadcastResourceUrl: no active resource to broadcast to')
+  const valid = validateResourceUrl(input.url)
+  if (!valid.ok) throw new Error('broadcastResourceUrl: ' + valid.reason)
+
+  const currentUrl = valid.url
+  const currentUrlVersion = input.version ?? generateUrlVersion()
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: teacherId, role: 'teacher' },
+    payload: { sessionId, currentUrl, currentUrlVersion },
+  }
+  return { sessionId, currentUrl, currentUrlVersion, meta }
+}
+
+export const defaultResourceUrlChangeTxn = (plan: ResourceUrlChangePlan): ProjectionTxn =>
+  db.tx.sessions[plan.sessionId].update({
+    currentUrl: plan.currentUrl,
+    currentUrlVersion: plan.currentUrlVersion,
+  })
+
+export type BroadcastResourceUrlDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (plan: ResourceUrlChangePlan) => ProjectionTxn
+}
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then
+ * dual-writes the `ResourceUrlChanged` envelope + the keyed `sessions` projection
+ * update (currentUrl + fresh currentUrlVersion) in ONE `writeEvent` transaction.
+ * A rejected write leaves no partial state (no orphan event, unchanged
+ * currentUrl/currentUrlVersion). NOT idempotent by design — each call mints a
+ * fresh `currentUrlVersion` and appends a fresh event (that is the re-sync
+ * mechanism); safe to retry after a rejection (the failed txn wrote nothing). The
+ * rejection propagates and is never swallowed. `deps` are injectable so the
+ * validation and rejection paths are unit-testable without a network.
+ */
+export async function broadcastResourceUrl(
+  input: BuildResourceUrlChangeInput,
+  deps: BroadcastResourceUrlDeps = {}
+): Promise<ResourceUrlChangePlan> {
+  const plan = buildResourceUrlChange(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultResourceUrlChangeTxn
+  await write('ResourceUrlChanged', plan.meta, [buildTxn(plan)])
   return plan
 }

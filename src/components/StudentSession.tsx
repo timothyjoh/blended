@@ -83,6 +83,7 @@ export default function StudentSession({ joinCode }: { joinCode: string }) {
       <ResourcePane
         activeResourceId={session.activeResourceId}
         currentUrl={session.currentUrl}
+        currentUrlVersion={session.currentUrlVersion}
       />
       <div>
         <p className="text-sm text-muted-foreground">In this session:</p>

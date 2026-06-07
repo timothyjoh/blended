@@ -60,6 +60,13 @@ export const schema = i.schema({
       // ResourcePane can render from the single session row (no resources query
       // needed in the student view). Additive — requires `instant-cli push schema`.
       currentUrl: i.string().optional(),
+      // Cycle 0017: a fresh per-broadcast token minted on every URL broadcast
+      // (and on activation) by the `ResourceUrlChanged`/`ResourceActivated`
+      // dual-write. It is the value `ResourcePane` keys its iframe on, so a new
+      // token forces a remount — re-snapping students who navigated locally,
+      // even when the broadcast URL equals the URL they wandered from. Additive
+      // — requires `instant-cli push schema`; inherits the owner-only rule.
+      currentUrlVersion: i.string().optional(),
       interactionMode: i.string<'none' | 'cursor_vote'>(),
     }),
     sessionResources: i.entity({
@@ -239,6 +246,9 @@ export type SessionProjection = {
     // Cycle 0016: set by the `ResourceActivated` fold.
     activeResourceId?: string
     currentUrl?: string
+    // Cycle 0017: fresh per-broadcast token set by the `ResourceUrlChanged`
+    // fold (and stamped on `ResourceActivated`) — keys the ResourcePane iframe.
+    currentUrlVersion?: string
   } | null
   participants: Record<string, { id: string; userId: string; role: string; username: string }>
   messages: Record<string, { id: string; participantId: string; text: string; createdAt: number }>
@@ -503,14 +513,18 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
         sessionId?: string
         resourceId?: string
         currentUrl?: string
+        currentUrlVersion?: string
       }
       const prev = projection.session
       const activeResourceId = typeof p.resourceId === 'string' ? p.resourceId : undefined
       const currentUrl = typeof p.currentUrl === 'string' ? p.currentUrl : undefined
+      // Cycle 0017: activation also stamps the per-broadcast re-sync token.
+      const currentUrlVersion =
+        typeof p.currentUrlVersion === 'string' ? p.currentUrlVersion : undefined
       return {
         ...projection,
         session: prev
-          ? { ...prev, activeResourceId, currentUrl }
+          ? { ...prev, activeResourceId, currentUrl, currentUrlVersion }
           : {
               id: p.sessionId ?? projection.sessionId,
               title: '',
@@ -518,6 +532,38 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
               teacherId: '',
               activeResourceId,
               currentUrl,
+              currentUrlVersion,
+            },
+      }
+    }
+    case 'ResourceUrlChanged': {
+      // Cycle 0017: a teacher broadcasts a new URL position WITHIN the active
+      // resource. Set the session's `currentUrl` + a fresh `currentUrlVersion`
+      // (the iframe re-sync key). Mirrors `ResourceActivated`: mutate the existing
+      // session row, tolerate an absent prior session by building a minimal one
+      // from the payload, never mutate input, re-fold convergently. Keeps
+      // `rebuildSessionProjection` whole — never reaches the `default`. The active
+      // resource is unchanged (broadcast moves position, not the resource).
+      const p = event.payload as {
+        sessionId?: string
+        currentUrl?: string
+        currentUrlVersion?: string
+      }
+      const prev = projection.session
+      const currentUrl = typeof p.currentUrl === 'string' ? p.currentUrl : undefined
+      const currentUrlVersion =
+        typeof p.currentUrlVersion === 'string' ? p.currentUrlVersion : undefined
+      return {
+        ...projection,
+        session: prev
+          ? { ...prev, currentUrl, currentUrlVersion }
+          : {
+              id: p.sessionId ?? projection.sessionId,
+              title: '',
+              status: '',
+              teacherId: '',
+              currentUrl,
+              currentUrlVersion,
             },
       }
     }

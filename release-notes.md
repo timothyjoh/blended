@@ -1,5 +1,35 @@
 # Release Notes
 
+## Cycle 0017 — Teacher-driven URL broadcast + student follow / re-sync
+
+- **New: teachers can now advance the broadcast URL of an active resource, and
+  students follow live.** Once a resource is active, the session facilitation view
+  (`/dashboard/sessions/<id>`) shows a **broadcast control** — a URL field + a
+  **Broadcast** button — above the resource pane. Typing the next slide's URL and
+  clicking **Broadcast** snaps every connected student's pane to that URL in
+  realtime, with no reload and no link to paste. This is the first time a teacher
+  can advance the room *through* a resource (slide 3 → slide 4) rather than only
+  choosing which resource is shown.
+- **Students re-sync on every broadcast.** A student who clicked or scrolled away
+  inside their own iframe is pulled back to the teacher's position on the next
+  broadcast — even when the teacher re-broadcasts the *same* URL the student
+  wandered from (the shared frame remounts). A student who joins late lands
+  directly on the teacher's current broadcast position, not the resource's first
+  page.
+- **Under the hood:** each broadcast writes a replayable `ResourceUrlChanged`
+  event together with the session's `currentUrl` + a **fresh `currentUrlVersion`
+  token** in one transaction (a rejected write leaves the position unchanged — no
+  orphan event). The shared pane keys its iframe on that token, so every broadcast
+  forces a fresh mount (the re-sync mechanism). Activation now also stamps
+  `currentUrlVersion` so activation and broadcast share one re-sync key. A blank,
+  unsafe, or unparseable URL is rejected inline (reusing the existing
+  `validateResourceUrl` seam) before any write; the control is disabled until a
+  resource is active; broadcast is admitted only for the owning teacher.
+- **Schema push required:** this cycle adds an additive `sessions.currentUrlVersion`
+  field — run `npx instant-cli push schema` before the feature works against the
+  live app. **No permission push** is needed (it inherits the existing `sessions`
+  owner-only-write rule).
+
 ## Cycle 0016 — Activate a resource and render it for teacher + students
 
 - **New: teachers can now activate a queued resource and every student sees it
