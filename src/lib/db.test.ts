@@ -96,6 +96,33 @@ const questionCreated: EventLike = {
   },
 }
 
+const questionAnswered: EventLike = {
+  id: 'evt-8',
+  type: 'QuestionAnswered',
+  occurredAt: 8000,
+  receivedAt: 8000,
+  payload: {
+    questionId: 'q1',
+    sessionId: 's1',
+    status: 'answered',
+    answerSummary: 'mitosis is cell division',
+    addressedBy: 'teacher-1',
+  },
+}
+
+const questionAnsweredNoSummary: EventLike = {
+  id: 'evt-9',
+  type: 'QuestionAnswered',
+  occurredAt: 9000,
+  receivedAt: 9000,
+  payload: {
+    questionId: 'q1',
+    sessionId: 's1',
+    status: 'answered',
+    addressedBy: 'teacher-1',
+  },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -208,6 +235,83 @@ describe('applyEvent', () => {
     const base = emptyProjection('s1')
     applyEvent(base, questionCreated)
     expect(base.questions).toEqual({})
+  })
+
+  it('folds QuestionAnswered onto a prior question: status → answered, summary + addressedBy applied', () => {
+    const created = applyEvent(emptyProjection('s1'), questionCreated)
+    const result = applyEvent(created, questionAnswered)
+    expect(result.questions.q1).toEqual({
+      id: 'q1',
+      messageId: 'm1',
+      participantId: 'p1',
+      sessionId: 's1',
+      status: 'answered',
+      createdAt: 7000,
+      answerSummary: 'mitosis is cell division',
+      addressedBy: 'teacher-1',
+    })
+  })
+
+  it('folds QuestionAnswered without a summary: status → answered, no answerSummary key', () => {
+    const created = applyEvent(emptyProjection('s1'), questionCreated)
+    const result = applyEvent(created, questionAnsweredNoSummary)
+    expect(result.questions.q1.status).toBe('answered')
+    expect(result.questions.q1.addressedBy).toBe('teacher-1')
+    expect(result.questions.q1).not.toHaveProperty('answerSummary')
+  })
+
+  it('folds QuestionAnswered defensively onto an absent prior question (minimal answered row)', () => {
+    const result = applyEvent(emptyProjection('s1'), questionAnswered)
+    expect(result.questions.q1).toEqual({
+      id: 'q1',
+      messageId: '',
+      participantId: '',
+      sessionId: 's1',
+      status: 'answered',
+      createdAt: 8000,
+      answerSummary: 'mitosis is cell division',
+      addressedBy: 'teacher-1',
+    })
+  })
+
+  it('does not throw on QuestionAnswered (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), questionAnswered)).not.toThrow()
+  })
+
+  it('folds QuestionAnswered defensively on a partial payload (keys by event id, fallback sessionId)', () => {
+    const partial: EventLike = {
+      id: 'evt-qa-partial',
+      type: 'QuestionAnswered',
+      occurredAt: 9500,
+      receivedAt: 9500,
+      payload: {},
+    }
+    const result = applyEvent(emptyProjection('s1'), partial)
+    // No questionId → keyed by event id; no sessionId → projection's; no summary
+    // or addressedBy keys; status still flips to answered.
+    expect(result.questions['evt-qa-partial']).toEqual({
+      id: 'evt-qa-partial',
+      messageId: '',
+      participantId: '',
+      sessionId: 's1',
+      status: 'answered',
+      createdAt: 9500,
+    })
+  })
+
+  it('re-folding the same QuestionAnswered reproduces the identical entry (idempotent)', () => {
+    const created = applyEvent(emptyProjection('s1'), questionCreated)
+    const once = applyEvent(created, questionAnswered)
+    const twice = applyEvent(once, questionAnswered)
+    expect(twice.questions.q1).toEqual(once.questions.q1)
+    expect(Object.keys(twice.questions)).toEqual(['q1'])
+  })
+
+  it('does not mutate the input projection when folding a QuestionAnswered', () => {
+    const created = applyEvent(emptyProjection('s1'), questionCreated)
+    applyEvent(created, questionAnswered)
+    expect(created.questions.q1.status).toBe('submitted')
+    expect(created.questions.q1).not.toHaveProperty('answerSummary')
   })
 
   it('surfaces an unknown event type instead of dropping it', () => {
@@ -349,6 +453,37 @@ describe('rebuildSessionProjection determinism', () => {
       sessionId: 's1',
       status: 'submitted',
       createdAt: 7000,
+    })
+  })
+
+  it('rebuilds a log with QuestionCreated then QuestionAnswered into an answered row', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      participantJoined,
+      chatMessageSubmitted,
+      questionCreated,
+      questionAnswered,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      questionAnswered,
+      questionCreated,
+      chatMessageSubmitted,
+      participantJoined,
+      sessionStarted,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    expect(Object.keys(inOrder.questions)).toEqual(['q1'])
+    expect(inOrder.questions.q1).toEqual({
+      id: 'q1',
+      messageId: 'm1',
+      participantId: 'p1',
+      sessionId: 's1',
+      status: 'answered',
+      createdAt: 7000,
+      answerSummary: 'mitosis is cell division',
+      addressedBy: 'teacher-1',
     })
   })
 

@@ -1,5 +1,37 @@
 # Release Notes
 
+## Cycle 0010 — Teacher question queue + mark answered
+
+- **New: teachers can now see student questions live and mark them answered.**
+  On the session facilitation view (`/dashboard/sessions/<id>`), below the
+  lifecycle controls, a teacher running a live session sees a realtime queue of
+  **open Questions only** — every `?`-derived Question a student asks appears in
+  the queue with no reload. Each row shows the question text and a control to
+  mark it answered, with an optional summary field; resolving a Question makes it
+  disappear from the queue immediately. When the queue is empty an explicit
+  empty-state message is shown. This closes the core teacher loop — see what's
+  being asked, resolve it, move on — and is the first surface where the `Question`
+  object created in cycle 0009 has a human consumer.
+- **The queue shows Questions, never the raw chat.** The teacher view still
+  mounts no chat island (SPEC §9.3): the queue reads only `questions`, reaching
+  each question's text strictly through its source-message link, so an ordinary
+  (non-`?`) chat message never appears.
+- **One sanctioned resolution path.** Marking answered routes through
+  `answerQuestion` → a replayable `QuestionAnswered` event dual-written with the
+  `questions` projection update (`status: 'answered'`, the teacher's id as
+  `addressedBy`, and the trimmed `answerSummary` when supplied) in a single
+  transaction — so a rejected answer leaves no partial state and the Question
+  stays in the queue to retry. A failed query or write surfaces inline and is
+  logged, never silently dropped.
+- New unit coverage in `src/lib/sessions.test.ts` (builder + wrapper, validation
+  and failure-path rejections) and `src/lib/db.test.ts` (the `QuestionAnswered`
+  fold + determinism), plus a new e2e suite `e2e/teacher-question-queue.spec.ts`
+  (student asks → teacher sees → mark answered, with admin-side observability;
+  skips loudly when admin env is unset).
+- **Migration / verification:** no schema change (the `questions` fields already
+  exist) and no permission change this cycle — **no `npx instant-cli push schema`
+  and no `perms:push` required.** No new env/config keys.
+
 ## Cycle 0009 — Auto-create a Question from messages ending in "?"
 
 - **New: a chat message ending in `?` now becomes a Question.** When a student

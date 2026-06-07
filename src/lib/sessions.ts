@@ -1,4 +1,4 @@
-import { db, id, writeEvent, type ProjectionTxn, type WriteEventMeta } from './db'
+import { db, id, writeEvent, type ActorRole, type ProjectionTxn, type WriteEventMeta } from './db'
 import { classifyMessage, deriveQuestionId } from './classify'
 
 // ---------------------------------------------------------------------------
@@ -654,5 +654,94 @@ export async function submitChatMessage(
     const q = buildQuestion(plan)
     await write('QuestionCreated', q.meta, [buildQuestionTxn(q.record)])
   }
+  return plan.record
+}
+
+// ---------------------------------------------------------------------------
+// Answer a Question (cycle 0010). The teacher-facing consumer of the Question
+// object: the SOLE sanctioned resolution path. `buildQuestionAnswer` is the
+// pure core — it totally validates input (present questionId/sessionId/actor
+// userId, actor.role 'teacher', and the already-answered duplicate-resolution
+// guard fed the LIVE status, mirroring `assertLegalTransition`) and trims an
+// optional `answerSummary`, omitting it when blank, BEFORE producing any
+// txn/envelope. `answerQuestion` is the thin wrapper that routes the dual-write
+// through `writeEvent('QuestionAnswered', …)` so the envelope + the keyed
+// `questions` projection update commit in one transaction. The projection
+// update is a keyed upsert on the existing known questionId — naturally
+// convergent on retry; the rejection propagates to the caller, never swallowed.
+// ---------------------------------------------------------------------------
+
+export type AnswerQuestionInput = {
+  questionId: string
+  sessionId: string
+  currentStatus: string
+  actor: { id: string; role: ActorRole } // must be 'teacher'
+  answerSummary?: string
+}
+
+export type QuestionAnswerRecord = {
+  id: string
+  sessionId: string
+  status: 'answered'
+  addressedBy: string
+  answerSummary?: string
+}
+
+export type BuildQuestionAnswerPlan = { record: QuestionAnswerRecord; meta: WriteEventMeta }
+
+export function buildQuestionAnswer(input: AnswerQuestionInput): BuildQuestionAnswerPlan {
+  const { questionId, sessionId, currentStatus } = input
+  if (!questionId) throw new Error('buildQuestionAnswer: a questionId is required')
+  if (!sessionId) throw new Error('buildQuestionAnswer: a sessionId is required')
+  if (!input.actor?.id) throw new Error('buildQuestionAnswer: an actor userId is required')
+  if (input.actor.role !== 'teacher')
+    throw new Error('buildQuestionAnswer: only a teacher may answer a question')
+  // Duplicate-resolution guard, fed the LIVE status (mirrors assertLegalTransition):
+  // answering an already-answered Question is rejected, never appends a second event.
+  if (currentStatus === 'answered')
+    throw new Error('buildQuestionAnswer: question is already answered')
+
+  const trimmed = input.answerSummary?.trim()
+  const record: QuestionAnswerRecord = {
+    id: questionId,
+    sessionId,
+    status: 'answered',
+    addressedBy: input.actor.id,
+    ...(trimmed ? { answerSummary: trimmed } : {}),
+  }
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: input.actor.id, role: 'teacher' },
+    payload: {
+      questionId,
+      sessionId,
+      status: 'answered',
+      addressedBy: input.actor.id,
+      ...(trimmed ? { answerSummary: trimmed } : {}),
+    },
+  }
+  return { record, meta }
+}
+
+const defaultQuestionAnswerTxn = (r: QuestionAnswerRecord): ProjectionTxn =>
+  db.tx.questions[r.id].update({
+    status: r.status,
+    addressedBy: r.addressedBy,
+    ...(r.answerSummary !== undefined ? { answerSummary: r.answerSummary } : {}),
+  })
+
+export type AnswerQuestionDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (record: QuestionAnswerRecord) => ProjectionTxn
+}
+
+export async function answerQuestion(
+  input: AnswerQuestionInput,
+  deps: AnswerQuestionDeps = {}
+): Promise<QuestionAnswerRecord> {
+  const plan = buildQuestionAnswer(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultQuestionAnswerTxn
+  await write('QuestionAnswered', plan.meta, [buildTxn(plan.record)])
   return plan.record
 }

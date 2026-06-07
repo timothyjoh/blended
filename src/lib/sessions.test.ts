@@ -18,6 +18,8 @@ import {
   shouldSubmitChatMessage,
   submitChatMessage,
   buildQuestion,
+  buildQuestionAnswer,
+  answerQuestion,
 } from './sessions'
 import { deriveQuestionId } from './classify'
 import { deriveUsername } from './auth'
@@ -766,5 +768,154 @@ describe('buildQuestion', () => {
   it('the derived question id differs from the source message id', () => {
     const { record } = buildQuestion(plan)
     expect(record.id).not.toBe(record.messageId)
+  })
+})
+
+describe('buildQuestionAnswer', () => {
+  const ok = {
+    questionId: 'q1',
+    sessionId: 's1',
+    currentStatus: 'submitted',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+  }
+
+  it('builds an answered record + teacher envelope with a trimmed summary', () => {
+    const { record, meta } = buildQuestionAnswer({ ...ok, answerSummary: '  cell division  ' })
+    expect(record).toEqual({
+      id: 'q1',
+      sessionId: 's1',
+      status: 'answered',
+      addressedBy: 'teacher-1',
+      answerSummary: 'cell division',
+    })
+    expect(meta.sessionId).toBe('s1')
+    expect(meta.actor).toEqual({ id: 'teacher-1', role: 'teacher' })
+    expect(meta.payload).toEqual({
+      questionId: 'q1',
+      sessionId: 's1',
+      status: 'answered',
+      addressedBy: 'teacher-1',
+      answerSummary: 'cell division',
+    })
+  })
+
+  it('omits answerSummary entirely when none is supplied', () => {
+    const { record, meta } = buildQuestionAnswer(ok)
+    expect(record).not.toHaveProperty('answerSummary')
+    expect(record.status).toBe('answered')
+    expect(record.addressedBy).toBe('teacher-1')
+    expect(meta.payload).not.toHaveProperty('answerSummary')
+  })
+
+  it('omits a blank/whitespace-only answerSummary', () => {
+    const { record, meta } = buildQuestionAnswer({ ...ok, answerSummary: '   ' })
+    expect(record).not.toHaveProperty('answerSummary')
+    expect(meta.payload).not.toHaveProperty('answerSummary')
+  })
+
+  it('throws when questionId is missing', () => {
+    expect(() => buildQuestionAnswer({ ...ok, questionId: '' })).toThrow(/questionId is required/)
+  })
+
+  it('throws when sessionId is missing', () => {
+    expect(() => buildQuestionAnswer({ ...ok, sessionId: '' })).toThrow(/sessionId is required/)
+  })
+
+  it('throws when actor userId is missing', () => {
+    expect(() =>
+      buildQuestionAnswer({ ...ok, actor: { id: '', role: 'teacher' } })
+    ).toThrow(/actor userId is required/)
+  })
+
+  it('throws when the actor is not a teacher', () => {
+    expect(() =>
+      buildQuestionAnswer({ ...ok, actor: { id: 'u1', role: 'student' } })
+    ).toThrow(/only a teacher may answer/)
+  })
+
+  it('throws when the question is already answered (duplicate-resolution guard)', () => {
+    expect(() => buildQuestionAnswer({ ...ok, currentStatus: 'answered' })).toThrow(
+      /already answered/
+    )
+  })
+})
+
+describe('answerQuestion wrapper', () => {
+  const ok = {
+    questionId: 'q1',
+    sessionId: 's1',
+    currentStatus: 'submitted',
+    actor: { id: 'teacher-1', role: 'teacher' as const },
+  }
+
+  it('calls write once with QuestionAnswered and one projection txn', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    const rec = await answerQuestion(
+      { ...ok, answerSummary: 'cell division' },
+      { write: write as never, buildTxn: () => ({}) as never }
+    )
+    expect(rec).toEqual({
+      id: 'q1',
+      sessionId: 's1',
+      status: 'answered',
+      addressedBy: 'teacher-1',
+      answerSummary: 'cell division',
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0][0]).toBe('QuestionAnswered')
+    expect((calls[0][1] as { actor: { role: string } }).actor.role).toBe('teacher')
+    expect((calls[0][1] as { sessionId: string }).sessionId).toBe('s1')
+    expect(calls[0][2]).toHaveLength(1)
+  })
+
+  it('propagates (does not swallow) a rejected write', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      answerQuestion(ok, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+
+  it('throws on invalid input before write is ever called', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      answerQuestion(
+        { ...ok, currentStatus: 'answered' },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/already answered/)
+    expect(called).toBe(false)
+  })
+
+  // Exercises the real default projection txn builder (only `write` stubbed):
+  // a single keyed `questions[id].update(...)` chunk, both with and without a
+  // summary, so the dual-write helper receives a non-empty txn array.
+  it('passes the default questions[id].update txn to write (with summary)', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    await answerQuestion({ ...ok, answerSummary: 'cell division' }, { write: write as never })
+    expect(calls[0][0]).toBe('QuestionAnswered')
+    expect(calls[0][2]).toHaveLength(1)
+  })
+
+  it('passes the default questions[id].update txn to write (without summary)', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    await answerQuestion(ok, { write: write as never })
+    expect(calls[0][0]).toBe('QuestionAnswered')
+    expect(calls[0][2]).toHaveLength(1)
   })
 })

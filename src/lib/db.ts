@@ -219,6 +219,7 @@ export type SessionProjection = {
   participants: Record<string, { id: string; userId: string; role: string; username: string }>
   messages: Record<string, { id: string; participantId: string; text: string; createdAt: number }>
   // Cycle 0009: teacher-facing Questions promoted from question-like messages.
+  // Cycle 0010: `answerSummary`/`addressedBy` recorded when a teacher answers.
   questions: Record<
     string,
     {
@@ -228,6 +229,8 @@ export type SessionProjection = {
       sessionId: string
       status: string
       createdAt: number
+      answerSummary?: string
+      addressedBy?: string
     }
   >
 }
@@ -375,6 +378,41 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
             sessionId: typeof p.sessionId === 'string' ? p.sessionId : projection.sessionId,
             status: typeof p.status === 'string' ? p.status : 'submitted',
             createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
+          },
+        },
+      }
+    }
+    case 'QuestionAnswered': {
+      // Cycle 0010: a teacher resolves a Question. Flip the existing row's
+      // `status` to 'answered' and apply `answerSummary`/`addressedBy` when the
+      // payload carries them. Mirrors the lifecycle cases: defensive (tolerates
+      // an absent prior question by building a minimal answered row from the
+      // payload), keyed by `questionId ?? event.id`, never mutates input, and
+      // re-folding reproduces the same row (the keyed update is convergent).
+      const p = event.payload as {
+        questionId?: string
+        sessionId?: string
+        answerSummary?: string
+        addressedBy?: string
+      }
+      const questionId = p.questionId ?? event.id
+      const prev = projection.questions[questionId]
+      return {
+        ...projection,
+        questions: {
+          ...projection.questions,
+          [questionId]: {
+            ...(prev ?? {
+              id: questionId,
+              messageId: '',
+              participantId: '',
+              sessionId: typeof p.sessionId === 'string' ? p.sessionId : projection.sessionId,
+              createdAt: event.occurredAt,
+            }),
+            id: questionId,
+            status: 'answered',
+            ...(typeof p.answerSummary === 'string' ? { answerSummary: p.answerSummary } : {}),
+            ...(typeof p.addressedBy === 'string' ? { addressedBy: p.addressedBy } : {}),
           },
         },
       }

@@ -193,7 +193,8 @@ or show your email.
 
 **Teachers do not see this raw chat stream.** The teacher facilitation view
 (`/dashboard/sessions/<id>`) renders no chat box and no message list by design —
-teachers work from curated Questions (a later cycle), not by reading every message.
+teachers work from curated Questions (see "Triaging questions" below), not by
+reading every message.
 
 Each send writes both a replayable `ChatMessageSubmitted` event and a `messages`
 projection row in one transaction, de-duplicated by a client action id. The chat
@@ -215,6 +216,26 @@ stores no email. This adds three additive schema links
 (`questionMessage`/`questionParticipant`/`questionSession`) — push them once with
 `npx instant-cli push schema` before the feature works against a schema-enforced
 live app (no new `.env` keys). The e2e suite is `e2e/auto-create-question.spec.ts`.
+
+## Triaging questions (teacher queue)
+
+The teacher facilitation view (`/dashboard/sessions/<id>`) now shows a **live
+queue of open questions** below the lifecycle controls. As students ask `?`
+questions in a live session, each one appears in the queue in realtime with no
+reload; ordinary (non-`?`) chat messages never appear — the queue reads only
+Questions, reaching each one's text through its source message, so the teacher
+exclusion of the raw chat is preserved. Each row has an optional summary field
+and a **Mark answered** button: clicking it (with or without a summary) resolves
+the Question and removes it from the queue immediately. When nothing is open, an
+explicit "no open questions yet" message is shown rather than a blank area.
+
+Answering routes through the single sanctioned path (`answerQuestion`), which
+writes a replayable `QuestionAnswered` event together with the `questions`
+projection update (status `answered`, the teacher as `addressedBy`, the trimmed
+summary when given) in one transaction — a rejected answer leaves the Question in
+the queue and surfaces an inline error rather than silently dropping it. No
+schema or permission push is required this cycle (the `questions` fields already
+exist; no new `.env` keys). The e2e suite is `e2e/teacher-question-queue.spec.ts`.
 
 ### Known limitations
 
@@ -280,6 +301,14 @@ live app (no new `.env` keys). The e2e suite is `e2e/auto-create-question.spec.t
   it should be tightened (scope `create` to the owning participant; `update` /
   `delete` to the row owner + owning teacher/admin; keep reads open) and pushed
   with `npm run perms:push` before later cycles build on `messages`.
+- A **failed teacher-queue question query renders as the empty state.** The open
+  questions derive from `qq.data?.questions ?? []`, so a `questions` live-query
+  error falls through to the "no open questions yet" message — logged to the
+  console but visually indistinguishable from a session that genuinely has none.
+  The inline `role="alert"` surface currently covers only a rejected answer
+  write, not the query itself, so a teacher whose query is failing can wrongly
+  assume nothing has been asked. A future cycle should route `qq.error` to the
+  alert surface and suppress the empty-state copy.
 
 ## Resources
 
