@@ -65,6 +65,22 @@ const sessionEnded: EventLike = {
   payload: { id: 's1', status: 'ended', endedAt: 4000 },
 }
 
+const chatMessageSubmitted: EventLike = {
+  id: 'evt-5',
+  type: 'ChatMessageSubmitted',
+  occurredAt: 5000,
+  receivedAt: 5000,
+  payload: { messageId: 'm1', participantId: 'p1', text: 'hello class', createdAt: 5000 },
+}
+
+const chatMessageSubmitted2: EventLike = {
+  id: 'evt-6',
+  type: 'ChatMessageSubmitted',
+  occurredAt: 6000,
+  receivedAt: 6000,
+  payload: { messageId: 'm2', participantId: 'p1', text: 'second message', createdAt: 6000 },
+}
+
 describe('applyEvent', () => {
   it('folds SessionCreated into the session projection', () => {
     const result = applyEvent(emptyProjection('s1'), sessionCreated)
@@ -84,6 +100,52 @@ describe('applyEvent', () => {
       role: 'student',
       username: 'ada',
     })
+  })
+
+  it('folds ChatMessageSubmitted keyed by messageId', () => {
+    const result = applyEvent(emptyProjection('s1'), chatMessageSubmitted)
+    expect(result.messages.m1).toEqual({
+      id: 'm1',
+      participantId: 'p1',
+      text: 'hello class',
+      createdAt: 5000,
+    })
+  })
+
+  it('does not throw on ChatMessageSubmitted (the type is known)', () => {
+    expect(() => applyEvent(emptyProjection('s1'), chatMessageSubmitted)).not.toThrow()
+  })
+
+  it('accumulates multiple chat messages in the messages map', () => {
+    const first = applyEvent(emptyProjection('s1'), chatMessageSubmitted)
+    const second = applyEvent(first, chatMessageSubmitted2)
+    expect(Object.keys(second.messages)).toEqual(['m1', 'm2'])
+    expect(second.messages.m2.text).toBe('second message')
+  })
+
+  it('folds ChatMessageSubmitted defensively on a partial payload (no throw)', () => {
+    const partial: EventLike = {
+      id: 'evt-partial',
+      type: 'ChatMessageSubmitted',
+      occurredAt: 7000,
+      receivedAt: 7000,
+      payload: {},
+    }
+    const result = applyEvent(emptyProjection('s1'), partial)
+    // Keyed by the event id when no messageId is present; defaults fill the rest,
+    // and createdAt falls back to occurredAt.
+    expect(result.messages['evt-partial']).toEqual({
+      id: 'evt-partial',
+      participantId: '',
+      text: '',
+      createdAt: 7000,
+    })
+  })
+
+  it('does not mutate the input projection when folding a chat message', () => {
+    const base = emptyProjection('s1')
+    applyEvent(base, chatMessageSubmitted)
+    expect(base.messages).toEqual({})
   })
 
   it('surfaces an unknown event type instead of dropping it', () => {
@@ -177,6 +239,28 @@ describe('rebuildSessionProjection determinism', () => {
     const inOrder = rebuildSessionProjection('s1', [sessionCreated, sessionStarted, sessionEnded])
     expect(shuffled).toEqual(inOrder)
     expect(shuffled.session?.status).toBe('ended')
+  })
+
+  it('rebuilds a stream including chat messages, regardless of input order', () => {
+    const inOrder = rebuildSessionProjection('s1', [
+      sessionCreated,
+      sessionStarted,
+      participantJoined,
+      chatMessageSubmitted,
+      chatMessageSubmitted2,
+    ])
+    const shuffled = rebuildSessionProjection('s1', [
+      chatMessageSubmitted2,
+      participantJoined,
+      sessionStarted,
+      chatMessageSubmitted,
+      sessionCreated,
+    ])
+    expect(shuffled).toEqual(inOrder)
+    expect(Object.keys(inOrder.messages)).toEqual(['m1', 'm2'])
+    expect(inOrder.messages.m1.text).toBe('hello class')
+    expect(inOrder.session?.status).toBe('live')
+    expect(inOrder.participants.p1.username).toBe('ada')
   })
 
   it('orders by occurredAt, then receivedAt, then id (§17.1)', () => {

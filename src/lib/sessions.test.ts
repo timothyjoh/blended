@@ -14,6 +14,9 @@ import {
   buildParticipantJoin,
   shouldCreateParticipant,
   joinSession,
+  buildChatMessage,
+  shouldSubmitChatMessage,
+  submitChatMessage,
 } from './sessions'
 import { deriveUsername } from './auth'
 
@@ -457,6 +460,169 @@ describe('joinSession wrapper', () => {
         { write: write as never, buildTxn: () => ({}) as never }
       )
     ).rejects.toThrow(/sessionId is required/)
+    expect(called).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Student chat submit (cycle 0008).
+// ---------------------------------------------------------------------------
+
+describe('buildChatMessage', () => {
+  const ok = {
+    sessionId: 's1',
+    participantId: 'p1',
+    userId: 'u1',
+    clientActionId: 'ca1',
+    text: 'hello class',
+    now: 100,
+  }
+
+  it('builds a visible/unclassified message record with the action id as its id', () => {
+    const { record } = buildChatMessage(ok)
+    expect(record).toEqual({
+      id: 'ca1',
+      sessionId: 's1',
+      participantId: 'p1',
+      clientActionId: 'ca1',
+      text: 'hello class',
+      visibility: 'visible',
+      classificationStatus: 'unclassified',
+      createdAt: 100,
+    })
+  })
+
+  it('builds a ChatMessageSubmitted envelope with a student actor and sessionId set', () => {
+    const { meta } = buildChatMessage(ok)
+    expect(meta.actor).toEqual({ id: 'u1', role: 'student' })
+    expect(meta.sessionId).toBe('s1')
+    expect(meta.payload).toEqual({
+      messageId: 'ca1',
+      participantId: 'p1',
+      text: 'hello class',
+      createdAt: 100,
+    })
+  })
+
+  it('keeps record.id === clientActionId === payload.messageId (deterministic, folds cleanly)', () => {
+    const { record, meta } = buildChatMessage(ok)
+    expect(record.id).toBe('ca1')
+    expect(record.clientActionId).toBe(record.id)
+    expect((meta.payload as { messageId: string }).messageId).toBe(record.id)
+  })
+
+  it('trims the text before storage', () => {
+    const { record, meta } = buildChatMessage({ ...ok, text: '   padded message   ' })
+    expect(record.text).toBe('padded message')
+    expect((meta.payload as { text: string }).text).toBe('padded message')
+  })
+
+  it('the produced record carries NO email key (structural privacy)', () => {
+    const { record } = buildChatMessage(ok)
+    expect(Object.keys(record)).not.toContain('email')
+    expect(JSON.stringify(record).toLowerCase()).not.toContain('email')
+  })
+
+  // Failure path: a missing sessionId is rejected BEFORE any plan is built.
+  it.each([null, undefined, ''])('rejects a missing sessionId %p', (bad) => {
+    expect(() => buildChatMessage({ ...ok, sessionId: bad })).toThrow(/sessionId is required/)
+  })
+
+  // Failure path: a missing/empty participantId is rejected.
+  it.each([null, undefined, ''])('rejects a missing participantId %p', (bad) => {
+    expect(() => buildChatMessage({ ...ok, participantId: bad })).toThrow(/participantId is required/)
+  })
+
+  // Failure path: a missing userId (no actor) is rejected.
+  it.each([null, undefined, ''])('rejects a missing userId %p', (bad) => {
+    expect(() => buildChatMessage({ ...ok, userId: bad })).toThrow(/signed in/)
+  })
+
+  // Failure path: a missing clientActionId is rejected.
+  it.each([null, undefined, ''])('rejects a missing clientActionId %p', (bad) => {
+    expect(() => buildChatMessage({ ...ok, clientActionId: bad })).toThrow(
+      /clientActionId is required/
+    )
+  })
+
+  // Failure path: blank/whitespace-only text is rejected (no plan, no write).
+  it.each([null, undefined, '', '   ', '\t\n'])('rejects blank/whitespace-only text %p', (bad) => {
+    expect(() => buildChatMessage({ ...ok, text: bad as never })).toThrow(/cannot be blank/)
+  })
+})
+
+describe('shouldSubmitChatMessage (idempotency gate)', () => {
+  const base = {
+    authUserId: 'u1',
+    participantId: 'p1',
+    messagesLoaded: true,
+    existingForActionId: 0,
+    inFlight: false,
+    text: 'hi',
+  }
+
+  it('is true only when authed + participant + loaded + no row + not in flight + non-blank', () => {
+    expect(shouldSubmitChatMessage(base)).toBe(true)
+  })
+
+  it.each([
+    ['no auth id', { authUserId: null }],
+    ['no participant', { participantId: null }],
+    ['not loaded', { messagesLoaded: false }],
+    ['a row already exists for this action id', { existingForActionId: 1 }],
+    ['a submit is in flight', { inFlight: true }],
+    ['blank text', { text: '   ' }],
+  ] as const)('is false when %s', (_label, override) => {
+    expect(shouldSubmitChatMessage({ ...base, ...override })).toBe(false)
+  })
+})
+
+describe('submitChatMessage wrapper', () => {
+  const ok = {
+    sessionId: 's1',
+    participantId: 'p1',
+    userId: 'u1',
+    clientActionId: 'ca1',
+    text: 'hello class',
+  }
+
+  it('calls write once with ChatMessageSubmitted and one projection txn', async () => {
+    const calls: unknown[][] = []
+    const write = (...args: unknown[]) => {
+      calls.push(args)
+      return Promise.resolve('ok')
+    }
+    const rec = await submitChatMessage(ok, { write: write as never, buildTxn: () => ({}) as never })
+    expect(rec.id).toBe('ca1')
+    expect(rec.text).toBe('hello class')
+    expect(calls).toHaveLength(1)
+    expect(calls[0][0]).toBe('ChatMessageSubmitted')
+    expect((calls[0][1] as { sessionId: string }).sessionId).toBe('s1')
+    expect((calls[0][1] as { actor: { role: string } }).actor.role).toBe('student')
+    expect(calls[0][2]).toHaveLength(1)
+  })
+
+  // Failure path: a rejected write propagates — it is not swallowed.
+  it('propagates (does not swallow) a rejected write', async () => {
+    const write = () => Promise.reject(new Error('permission denied'))
+    await expect(
+      submitChatMessage(ok, { write: write as never, buildTxn: () => ({}) as never })
+    ).rejects.toThrow(/permission denied/)
+  })
+
+  // Failure path: invalid input throws before write is ever called.
+  it('rejects synchronously on invalid input without calling write', async () => {
+    let called = false
+    const write = () => {
+      called = true
+      return Promise.resolve()
+    }
+    await expect(
+      submitChatMessage(
+        { ...ok, text: '   ' },
+        { write: write as never, buildTxn: () => ({}) as never }
+      )
+    ).rejects.toThrow(/cannot be blank/)
     expect(called).toBe(false)
   })
 })

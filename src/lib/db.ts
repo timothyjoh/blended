@@ -107,6 +107,11 @@ export const schema = i.schema({
     messages: i.entity({
       sessionId: i.string().indexed(),
       participantId: i.string(),
+      // Cycle 0008: the client-minted action id that de-dups a double-submit. The
+      // `messages` row id IS this value (deterministic keyed upsert), so a repeated
+      // logical submit collapses to one row. Indexed so the per-action-id probe is
+      // server-queryable.
+      clientActionId: i.string().indexed(),
       text: i.string(),
       visibility: i.string(),
       classificationStatus: i.string(),
@@ -147,6 +152,15 @@ export const schema = i.schema({
       forward: { on: 'participants', has: 'one', label: 'session' },
       reverse: { on: 'sessions', has: 'many', label: 'participants' },
     },
+    // Cycle 0008: link each `messages` row to its parent session (mirroring
+    // `participantSession`) so a session can enumerate its message rows and a
+    // future tightened `messages` rule can traverse `data.ref('session.teacherId')`.
+    // The chat submit sets the forward `session` link; the reverse `messages`
+    // label lets a session enumerate its message rows.
+    messageSession: {
+      forward: { on: 'messages', has: 'one', label: 'session' },
+      reverse: { on: 'sessions', has: 'many', label: 'messages' },
+    },
   },
 })
 
@@ -184,6 +198,7 @@ export type SessionProjection = {
   sessionId: string
   session: { id: string; title: string; status: string; teacherId: string } | null
   participants: Record<string, { id: string; userId: string; role: string; username: string }>
+  messages: Record<string, { id: string; participantId: string; text: string; createdAt: number }>
 }
 
 /** Raised when `applyEvent` meets a type it does not know — never silently dropped. */
@@ -195,7 +210,7 @@ export class UnknownEventTypeError extends Error {
 }
 
 export function emptyProjection(sessionId: string): SessionProjection {
-  return { sessionId, session: null, participants: {} }
+  return { sessionId, session: null, participants: {}, messages: {} }
 }
 
 /**
@@ -270,6 +285,32 @@ export function applyEvent(projection: SessionProjection, event: EventLike): Ses
             userId: typeof p.userId === 'string' ? p.userId : '',
             role: typeof p.role === 'string' ? p.role : 'student',
             username: typeof p.username === 'string' ? p.username : '',
+          },
+        },
+      }
+    }
+    case 'ChatMessageSubmitted': {
+      // Cycle 0008: fold a student chat message into the `messages` map, keyed by
+      // the deterministic message id (=== the client action id). Mirrors
+      // `ParticipantJoined`: tolerant of absent prior state + partial payload
+      // (defensive defaults) so an out-of-order/partial log folds without a
+      // spurious throw, and re-folding the same event reproduces the same entry.
+      const p = event.payload as {
+        messageId?: string
+        participantId?: string
+        text?: string
+        createdAt?: number
+      }
+      const messageId = p.messageId ?? event.id
+      return {
+        ...projection,
+        messages: {
+          ...projection.messages,
+          [messageId]: {
+            id: messageId,
+            participantId: typeof p.participantId === 'string' ? p.participantId : '',
+            text: typeof p.text === 'string' ? p.text : '',
+            createdAt: typeof p.createdAt === 'number' ? p.createdAt : event.occurredAt,
           },
         },
       }

@@ -1,0 +1,12 @@
+{
+  "files": [
+    "AGENTS.md",
+    "README.md",
+    "src/components/StudentChat.tsx",
+    "src/lib/db.test.ts",
+    "src/lib/db.ts",
+    "src/lib/sessions.test.ts",
+    "src/lib/sessions.ts",
+    "src/pages/s/[joinCode].astro"
+  ]
+}

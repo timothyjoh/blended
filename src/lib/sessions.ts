@@ -424,3 +424,155 @@ export async function joinSession(
   await write('ParticipantJoined', plan.meta, [buildTxn(plan.record)])
   return plan.record
 }
+
+// ---------------------------------------------------------------------------
+// Student chat submit (cycle 0008). The SOLE sanctioned message-create path,
+// following the same pure-core/thin-wrapper split as join above:
+// `buildChatMessage` totally validates and produces the projection record +
+// `ChatMessageSubmitted` envelope BEFORE any write; `submitChatMessage` routes the
+// dual-write through `writeEvent('ChatMessageSubmitted', …)`. Idempotency per
+// logical submit comes from a CLIENT ACTION ID: the `messages` row id IS the
+// client action id (`record.id === clientActionId === payload.messageId`), a
+// deterministic keyed upsert, so re-submitting the same id writes the same row —
+// not a second. The caller pre-checks with `shouldSubmitChatMessage` (mirroring
+// `shouldCreateParticipant`) + an `inFlight` latch so a double-fire collapses to
+// one row. The record carries the participant id only — never an email; the
+// stream renders the participant `username` (local-part), privacy is structural.
+// ---------------------------------------------------------------------------
+
+/** The `messages` projection row this cycle writes — always `visible`/`unclassified`. */
+export type MessageRecord = {
+  id: string
+  sessionId: string
+  participantId: string
+  clientActionId: string
+  text: string
+  visibility: 'visible'
+  classificationStatus: 'unclassified'
+  createdAt: number
+}
+
+export type BuildChatMessageInput = {
+  sessionId: string | null | undefined
+  participantId: string | null | undefined
+  // The submitting user's auth id — becomes the envelope `actor.id`.
+  userId: string | null | undefined
+  // The client-minted action id — de-dups a double-submit; the row id === this.
+  clientActionId: string | null | undefined
+  text: string | null | undefined
+  // Injectable for deterministic tests; production uses the default.
+  now?: number
+}
+
+export type ChatMessagePlan = { record: MessageRecord; meta: WriteEventMeta }
+
+/**
+ * Pure builder: totally validates BEFORE producing any plan. A missing
+ * `sessionId`, a missing/empty `participantId`, a missing `userId` (no actor), a
+ * missing `clientActionId`, or blank/whitespace-only `text` is rejected by
+ * throwing synchronously — so nothing is ever written for an invalid submit. The
+ * `record.id === clientActionId === meta.payload.messageId`, a deterministic keyed
+ * upsert, so a repeated logical submit folds to the SAME `messages` row (the
+ * idempotency guarantee) and the event folds cleanly through `applyEvent`'s
+ * `ChatMessageSubmitted` case. The text is trimmed before storage. The record
+ * carries NO `email` key — privacy is structural.
+ */
+export function buildChatMessage(input: BuildChatMessageInput): ChatMessagePlan {
+  const sessionId = input.sessionId
+  if (!sessionId) throw new Error('submitChatMessage: a sessionId is required')
+  const participantId = input.participantId
+  if (!participantId) throw new Error('submitChatMessage: a participantId is required')
+  const userId = input.userId
+  if (!userId) throw new Error('submitChatMessage: must be signed in to send a message')
+  const clientActionId = input.clientActionId
+  if (!clientActionId) throw new Error('submitChatMessage: a clientActionId is required')
+  const text = (input.text ?? '').trim()
+  if (text === '') throw new Error('submitChatMessage: a message cannot be blank')
+
+  const at = input.now ?? Date.now()
+  const record: MessageRecord = {
+    id: clientActionId,
+    sessionId,
+    participantId,
+    clientActionId,
+    text,
+    visibility: 'visible',
+    classificationStatus: 'unclassified',
+    createdAt: at,
+  }
+  const meta: WriteEventMeta = {
+    sessionId,
+    actor: { id: userId, role: 'student' },
+    payload: { messageId: clientActionId, participantId, text, createdAt: at },
+  }
+  return { record, meta }
+}
+
+/**
+ * Pure idempotency gate, mirroring `shouldCreateParticipant`. Returns true ONLY
+ * when an auth id exists, a `participantId` is resolved, the per-action-id query
+ * has loaded, no `messages` row exists yet for this client action id, no submit is
+ * already in flight, AND the text is non-blank. The caller uses this to decide
+ * submit-vs-no-op before any write — the per-logical-submit idempotency guarantee.
+ */
+export function shouldSubmitChatMessage(input: {
+  authUserId: string | null | undefined
+  participantId: string | null | undefined
+  messagesLoaded: boolean
+  existingForActionId: number
+  inFlight: boolean
+  text: string | null | undefined
+}): boolean {
+  const { authUserId, participantId, messagesLoaded, existingForActionId, inFlight, text } = input
+  return (
+    Boolean(authUserId) &&
+    Boolean(participantId) &&
+    messagesLoaded &&
+    existingForActionId === 0 &&
+    !inFlight &&
+    (text ?? '').trim() !== ''
+  )
+}
+
+export type SubmitChatMessageDeps = {
+  write?: typeof writeEvent
+  buildTxn?: (record: MessageRecord) => ProjectionTxn
+}
+
+const defaultChatTxn = (r: MessageRecord): ProjectionTxn =>
+  db.tx.messages[r.id]
+    .update({
+      sessionId: r.sessionId,
+      participantId: r.participantId,
+      clientActionId: r.clientActionId,
+      text: r.text,
+      visibility: r.visibility,
+      classificationStatus: r.classificationStatus,
+      createdAt: r.createdAt,
+    })
+    // Set the parent-session link (mirroring the participant join) so the session
+    // can enumerate its messages and a future tightened rule can traverse it.
+    .link({ session: r.sessionId })
+
+/**
+ * Thin wrapper: builds the plan (sync-throws on bad input, writing nothing), then
+ * dual-writes the `ChatMessageSubmitted` envelope + `messages` projection (incl.
+ * the `session` link) in ONE `writeEvent` transaction. Because the append and
+ * projection share that transaction, a rejected submit leaves no partial state (no
+ * orphan event, no orphan message row). Idempotency per logical submit comes from
+ * the deterministic row id (`messages[clientActionId]` keyed upsert) — a retry of
+ * the SAME client action id writes the same row, not a second; the caller's
+ * `shouldSubmitChatMessage` pre-check + `inFlight` latch suppress the duplicate
+ * envelope. The rejection propagates to the caller and is never swallowed. `deps`
+ * are injectable so the paths are unit-testable without a network.
+ */
+export async function submitChatMessage(
+  input: BuildChatMessageInput,
+  deps: SubmitChatMessageDeps = {}
+): Promise<MessageRecord> {
+  const plan = buildChatMessage(input)
+  const write = deps.write ?? writeEvent
+  const buildTxn = deps.buildTxn ?? defaultChatTxn
+  await write('ChatMessageSubmitted', plan.meta, [buildTxn(plan.record)])
+  return plan.record
+}

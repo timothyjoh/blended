@@ -179,6 +179,30 @@ forgery-proof parent-session link). The join e2e suite is
 `e2e/join-via-link.spec.ts` (multi-context late-joiner + failure legs; skips
 loudly when admin env is unset).
 
+## Chatting in a session
+
+Once you have joined a **live** session, the student view `/s/<joinCode>` now has
+a single chat box: type a message, press **Send**, and it appears in your stream —
+and in every other student's stream — in realtime, with no reload. A student who
+opens the link *after* messages were posted sees the prior history. There is one
+plain text input and no message-type picker: you just write naturally. A blank or
+whitespace-only message is rejected inline and writes nothing; sending the same
+message twice (e.g. a double-click) still produces exactly one message. Your
+display name in the stream is your email **local-part only** — messages never store
+or show your email.
+
+**Teachers do not see this raw chat stream.** The teacher facilitation view
+(`/dashboard/sessions/<id>`) renders no chat box and no message list by design —
+teachers work from curated Questions (a later cycle), not by reading every message.
+
+Each send writes both a replayable `ChatMessageSubmitted` event and a `messages`
+projection row in one transaction, de-duplicated by a client action id. The chat
+e2e suite is `e2e/student-chat.spec.ts` (realtime, late-joiner, teacher-exclusion,
+dual-write, idempotency, and blank-failure legs; skips loudly when admin env is
+unset). The schema gains `messages.clientActionId` + a `messageSession` link this
+cycle — push it once with `npx instant-cli push schema` before the feature works
+against a schema-enforced live app (no new `.env` keys).
+
 ### Known limitations
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
@@ -232,6 +256,17 @@ loudly when admin env is unset).
   0–7 are marginally more likely than 8–30. The source is still a CSPRNG and the
   code stays unguessable (~49 bits); rejection sampling would make the
   distribution provably uniform if a future cycle needs it.
+- **Chat messages still run under the permissive `$default` rule.** This is the
+  first cycle to write real `messages` rows, but the entity is not yet covered by
+  a scoped permission rule (`src/lib/perms.ts`), so every operation is open: any
+  client (including unauthenticated) can read every session's chat, create a
+  message spoofing another `participantId`, and edit or delete other students'
+  messages. Open cross-student reads are needed for the realtime stream, but
+  write/delete were never meant to stay open once rows exist. The `messageSession`
+  link was added this cycle precisely to enable a participant/owner-scoped rule;
+  it should be tightened (scope `create` to the owning participant; `update` /
+  `delete` to the row owner + owning teacher/admin; keep reads open) and pushed
+  with `npm run perms:push` before later cycles build on `messages`.
 
 ## Resources
 
