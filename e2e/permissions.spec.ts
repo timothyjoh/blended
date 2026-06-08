@@ -10,7 +10,7 @@ import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 test.describe('data-layer permission rules', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — permission e2e requires admin code minting against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — permission e2e requires admin code minting against the live app'
   )
 
   function freshSessionId(): string {

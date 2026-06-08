@@ -5,14 +5,14 @@ import { expect, type Page } from '@playwright/test'
 // Deterministic magic-code seam for the auth e2e suite. InstantDB ships no
 // client-side fixed test code, so we mint a server-valid code via the ADMIN SDK
 // (`generateMagicCode`, which returns a valid code WITHOUT sending an email).
-// This is e2e-only: the admin token is Node-side, never exposed to product/
-// client code. When the token is absent the spec skips loudly (never a false
-// green) — see e2e/auth.spec.ts.
+// This helper is e2e-only: the server-only admin token stays Node-side and is
+// never exposed to client code. When the token is absent the spec skips loudly
+// (never a false green) — see e2e/auth.spec.ts.
 // ---------------------------------------------------------------------------
 
-/** True only when both the app id and the e2e-only admin token are present. */
+/** True only when both the app id and the server-only admin token are present. */
 export function adminAvailable(): boolean {
-  return !!process.env.INSTANT_ADMIN_TOKEN && !!process.env.PUBLIC_INSTANTDB_APP_ID
+  return !!process.env.INSTANTDB_ADMIN_TOKEN && !!process.env.PUBLIC_INSTANTDB_APP_ID
 }
 
 /**
@@ -23,7 +23,7 @@ export function adminAvailable(): boolean {
 export async function mintCode(email: string): Promise<string> {
   const admin = init({
     appId: process.env.PUBLIC_INSTANTDB_APP_ID as string,
-    adminToken: process.env.INSTANT_ADMIN_TOKEN as string,
+    adminToken: process.env.INSTANTDB_ADMIN_TOKEN as string,
   })
   const { code } = await admin.auth.generateMagicCode(email)
   return code
@@ -43,7 +43,7 @@ export function freshEmail(): string {
 export async function queryAdmin(query: Record<string, unknown>): Promise<any> {
   const admin = init({
     appId: process.env.PUBLIC_INSTANTDB_APP_ID as string,
-    adminToken: process.env.INSTANT_ADMIN_TOKEN as string,
+    adminToken: process.env.INSTANTDB_ADMIN_TOKEN as string,
   })
   return admin.query(query as any)
 }

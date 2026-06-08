@@ -15,7 +15,7 @@ import { buildEventEnvelope } from '@/lib/db'
 // `AdminBootstrapped` event under `IDENTITY_SCOPE`, transacted ATOMICALLY with
 // the `users` update.
 //
-// Secrets (`INSTANT_ADMIN_TOKEN`, `ADMIN_EMAILS`) are read via `process.env`
+// Secrets (`INSTANTDB_ADMIN_TOKEN`, `ADMIN_EMAILS`) are read via `process.env`
 // (no `PUBLIC_` prefix ⇒ never bundled to the client). Every failure branch
 // returns a distinct status with a JSON `{ error }` body and logs
 // `[api/admin/bootstrap] …` — nothing is swallowed.
@@ -31,13 +31,13 @@ const json = (status: number, body: unknown) =>
 
 export const POST: APIRoute = async ({ request }) => {
   const appId = process.env.PUBLIC_INSTANTDB_APP_ID
-  const adminToken = process.env.INSTANT_ADMIN_TOKEN
+  const adminToken = process.env.INSTANTDB_ADMIN_TOKEN
   // Admin SDK unavailable → cannot verify a token or perform a rule-bypassing
   // write. Surface a clear 500 and write nothing; the client logs it and the
   // user stays non-admin (the rest of the app remains usable).
   if (!appId || !adminToken) {
     console.error(
-      '[api/admin/bootstrap] admin SDK unavailable: INSTANT_ADMIN_TOKEN / PUBLIC_INSTANTDB_APP_ID unset'
+      '[api/admin/bootstrap] admin SDK unavailable: INSTANTDB_ADMIN_TOKEN / PUBLIC_INSTANTDB_APP_ID unset'
     )
     return json(500, { error: 'admin-unavailable' })
   }

@@ -9,7 +9,7 @@ import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 test.describe('email magic-code authentication', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — auth e2e requires admin code minting'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — auth e2e requires admin code minting'
   )
 
   async function gotoLogin(page: Page) {

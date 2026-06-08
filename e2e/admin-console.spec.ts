@@ -13,7 +13,7 @@ import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 test.describe('admin console: system-wide realtime session list (/admin)', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — admin-console e2e requires admin code minting + the admin seed/query seam against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — admin-console e2e requires admin code minting + the admin seed/query seam against the live app'
   )
 
   const ALLOWLISTED = 'admin@blended.test'
@@ -22,7 +22,7 @@ test.describe('admin console: system-wide realtime session list (/admin)', () =>
   function adminDb() {
     return init({
       appId: process.env.PUBLIC_INSTANTDB_APP_ID as string,
-      adminToken: process.env.INSTANT_ADMIN_TOKEN as string,
+      adminToken: process.env.INSTANTDB_ADMIN_TOKEN as string,
     })
   }
 

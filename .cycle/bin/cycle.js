@@ -57,6 +57,32 @@ var init_child_env = __esm({
   }
 });
 
+// src/cli/validate-workflow.ts
+function validateWorkflowName(workflow, available, prefix) {
+  const availableList = available.join(", ");
+  if (workflow === "") {
+    return {
+      ok: false,
+      message: `${prefix}: --workflow requires a value \u2014 available workflows: ${availableList}`
+    };
+  }
+  const resolved = workflow ?? DEFAULT_WORKFLOW;
+  if (!available.includes(resolved)) {
+    return {
+      ok: false,
+      message: `${prefix}: unknown workflow "${resolved}" \u2014 available workflows: ${availableList}`
+    };
+  }
+  return { ok: true, name: resolved };
+}
+var DEFAULT_WORKFLOW;
+var init_validate_workflow = __esm({
+  "src/cli/validate-workflow.ts"() {
+    "use strict";
+    DEFAULT_WORKFLOW = "feature";
+  }
+});
+
 // src/issue/id.ts
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
@@ -76,9 +102,9 @@ var init_id = __esm({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/identity.js"(exports) {
+  "node_modules/yaml/dist/nodes/identity.js"(exports) {
     "use strict";
     var ALIAS = Symbol.for("yaml.alias");
     var DOC = Symbol.for("yaml.document");
@@ -133,9 +159,9 @@ var require_identity = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/visit.js"(exports) {
+  "node_modules/yaml/dist/visit.js"(exports) {
     "use strict";
     var identity = require_identity();
     var BREAK = Symbol("break visit");
@@ -291,9 +317,9 @@ var require_visit = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/directives.js"(exports) {
+  "node_modules/yaml/dist/doc/directives.js"(exports) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -462,9 +488,9 @@ var require_directives = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/anchors.js"(exports) {
+  "node_modules/yaml/dist/doc/anchors.js"(exports) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -532,9 +558,9 @@ var require_anchors = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/applyReviver.js"(exports) {
+  "node_modules/yaml/dist/doc/applyReviver.js"(exports) {
     "use strict";
     function applyReviver(reviver, obj, key, val) {
       if (val && typeof val === "object") {
@@ -582,9 +608,9 @@ var require_applyReviver = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/toJS.js"(exports) {
+  "node_modules/yaml/dist/nodes/toJS.js"(exports) {
     "use strict";
     var identity = require_identity();
     function toJS(value, arg, ctx) {
@@ -612,9 +638,9 @@ var require_toJS = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Node.js"(exports) {
+  "node_modules/yaml/dist/nodes/Node.js"(exports) {
     "use strict";
     var applyReviver = require_applyReviver();
     var identity = require_identity();
@@ -653,9 +679,9 @@ var require_Node = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Alias.js"(exports) {
+  "node_modules/yaml/dist/nodes/Alias.js"(exports) {
     "use strict";
     var anchors = require_anchors();
     var visit = require_visit();
@@ -769,9 +795,9 @@ var require_Alias = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Scalar.js"(exports) {
+  "node_modules/yaml/dist/nodes/Scalar.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Node = require_Node();
@@ -799,9 +825,9 @@ var require_Scalar = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/createNode.js"(exports) {
+  "node_modules/yaml/dist/doc/createNode.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -874,9 +900,9 @@ var require_createNode = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Collection.js"(exports) {
+  "node_modules/yaml/dist/nodes/Collection.js"(exports) {
     "use strict";
     var createNode = require_createNode();
     var identity = require_identity();
@@ -1017,9 +1043,9 @@ var require_Collection = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyComment.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyComment.js"(exports) {
     "use strict";
     var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
     function indentComment(comment, indent) {
@@ -1034,9 +1060,9 @@ var require_stringifyComment = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/foldFlowLines.js"(exports) {
+  "node_modules/yaml/dist/stringify/foldFlowLines.js"(exports) {
     "use strict";
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
@@ -1170,9 +1196,9 @@ ${indent}${text.slice(fold + 1, end2)}`;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyString.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyString.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var foldFlowLines = require_foldFlowLines();
@@ -1453,9 +1479,9 @@ ${indent}`);
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringify.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringify.js"(exports) {
     "use strict";
     var anchors = require_anchors();
     var identity = require_identity();
@@ -1577,9 +1603,9 @@ ${ctx.indent}${str}`;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyPair.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyPair.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1710,9 +1736,9 @@ ${ctx.indent}`;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/log.js"(exports) {
+  "node_modules/yaml/dist/log.js"(exports) {
     "use strict";
     var node_process = __require("process");
     function debug(logLevel, ...messages) {
@@ -1732,9 +1758,9 @@ var require_log = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1792,9 +1818,9 @@ var require_merge = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports) {
+  "node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports) {
     "use strict";
     var log2 = require_log();
     var merge = require_merge();
@@ -1856,9 +1882,9 @@ var require_addPairToJSMap = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/Pair.js"(exports) {
+  "node_modules/yaml/dist/nodes/Pair.js"(exports) {
     "use strict";
     var createNode = require_createNode();
     var stringifyPair = require_stringifyPair();
@@ -1896,9 +1922,9 @@ var require_Pair = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyCollection.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyCollection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -2047,9 +2073,9 @@ ${indent}${end}`;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/YAMLMap.js"(exports) {
+  "node_modules/yaml/dist/nodes/YAMLMap.js"(exports) {
     "use strict";
     var stringifyCollection = require_stringifyCollection();
     var addPairToJSMap = require_addPairToJSMap();
@@ -2191,9 +2217,9 @@ var require_YAMLMap = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/map.js"(exports) {
+  "node_modules/yaml/dist/schema/common/map.js"(exports) {
     "use strict";
     var identity = require_identity();
     var YAMLMap = require_YAMLMap();
@@ -2213,9 +2239,9 @@ var require_map = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/nodes/YAMLSeq.js"(exports) {
+  "node_modules/yaml/dist/nodes/YAMLSeq.js"(exports) {
     "use strict";
     var createNode = require_createNode();
     var stringifyCollection = require_stringifyCollection();
@@ -2329,9 +2355,9 @@ var require_YAMLSeq = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/seq.js"(exports) {
+  "node_modules/yaml/dist/schema/common/seq.js"(exports) {
     "use strict";
     var identity = require_identity();
     var YAMLSeq = require_YAMLSeq();
@@ -2351,9 +2377,9 @@ var require_seq = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/string.js"(exports) {
+  "node_modules/yaml/dist/schema/common/string.js"(exports) {
     "use strict";
     var stringifyString = require_stringifyString();
     var string = {
@@ -2370,9 +2396,9 @@ var require_string = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/common/null.js"(exports) {
+  "node_modules/yaml/dist/schema/common/null.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var nullTag = {
@@ -2388,9 +2414,9 @@ var require_null = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/bool.js"(exports) {
+  "node_modules/yaml/dist/schema/core/bool.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var boolTag = {
@@ -2412,16 +2438,16 @@ var require_bool = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyNumber.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyNumber.js"(exports) {
     "use strict";
     function stringifyNumber({ format, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
         return String(value);
-      const num = typeof value === "number" ? value : Number(value);
-      if (!isFinite(num))
-        return isNaN(num) ? ".nan" : num < 0 ? "-.inf" : ".inf";
+      const num2 = typeof value === "number" ? value : Number(value);
+      if (!isFinite(num2))
+        return isNaN(num2) ? ".nan" : num2 < 0 ? "-.inf" : ".inf";
       let n = Object.is(value, -0) ? "-0" : JSON.stringify(value);
       if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n) && !n.includes("e")) {
         let i = n.indexOf(".");
@@ -2439,9 +2465,9 @@ var require_stringifyNumber = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/float.js"(exports) {
+  "node_modules/yaml/dist/schema/core/float.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2461,8 +2487,8 @@ var require_float = __commonJS({
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str),
       stringify(node) {
-        const num = Number(node.value);
-        return isFinite(num) ? num.toExponential() : stringifyNumber.stringifyNumber(node);
+        const num2 = Number(node.value);
+        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
       }
     };
     var float = {
@@ -2485,9 +2511,9 @@ var require_float = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/int.js"(exports) {
+  "node_modules/yaml/dist/schema/core/int.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -2530,9 +2556,9 @@ var require_int = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/core/schema.js"(exports) {
+  "node_modules/yaml/dist/schema/core/schema.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -2558,9 +2584,9 @@ var require_schema = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/json/schema.js"(exports) {
+  "node_modules/yaml/dist/schema/json/schema.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var map = require_map();
@@ -2625,9 +2651,9 @@ var require_schema2 = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports) {
     "use strict";
     var node_buffer = __require("buffer");
     var Scalar = require_Scalar();
@@ -2691,9 +2717,9 @@ var require_binary = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -2769,9 +2795,9 @@ ${cn.comment}` : item.comment;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports) {
     "use strict";
     var identity = require_identity();
     var toJS = require_toJS();
@@ -2847,9 +2873,9 @@ var require_omap = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     function boolStringify({ value, source }, ctx) {
@@ -2879,9 +2905,9 @@ var require_bool2 = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2901,8 +2927,8 @@ var require_float2 = __commonJS({
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str.replace(/_/g, "")),
       stringify(node) {
-        const num = Number(node.value);
-        return isFinite(num) ? num.toExponential() : stringifyNumber.stringifyNumber(node);
+        const num2 = Number(node.value);
+        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node);
       }
     };
     var float = {
@@ -2928,9 +2954,9 @@ var require_float2 = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -3007,9 +3033,9 @@ var require_int2 = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -3096,31 +3122,31 @@ var require_set = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num = (n) => asBigInt ? BigInt(n) : Number(n);
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num(60) + num(p), num(0));
-      return sign === "-" ? num(-1) * res : res;
+      const num2 = (n) => asBigInt ? BigInt(n) : Number(n);
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num2(60) + num2(p), num2(0));
+      return sign === "-" ? num2(-1) * res : res;
     }
     function stringifySexagesimal(node) {
       let { value } = node;
-      let num = (n) => n;
+      let num2 = (n) => n;
       if (typeof value === "bigint")
-        num = (n) => BigInt(n);
+        num2 = (n) => BigInt(n);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node);
       let sign = "";
       if (value < 0) {
         sign = "-";
-        value *= num(-1);
+        value *= num2(-1);
       }
-      const _60 = num(60);
+      const _60 = num2(60);
       const parts = [value % _60];
       if (value < 60) {
         parts.unshift(0);
@@ -3184,9 +3210,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports) {
+  "node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3228,9 +3254,9 @@ var require_schema3 = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/tags.js"(exports) {
+  "node_modules/yaml/dist/schema/tags.js"(exports) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3322,9 +3348,9 @@ var require_tags = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/schema/Schema.js"(exports) {
+  "node_modules/yaml/dist/schema/Schema.js"(exports) {
     "use strict";
     var identity = require_identity();
     var map = require_map();
@@ -3354,9 +3380,9 @@ var require_Schema = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/stringify/stringifyDocument.js"(exports) {
+  "node_modules/yaml/dist/stringify/stringifyDocument.js"(exports) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -3434,9 +3460,9 @@ var require_stringifyDocument = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/doc/Document.js"(exports) {
+  "node_modules/yaml/dist/doc/Document.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var Collection = require_Collection();
@@ -3743,9 +3769,9 @@ var require_Document = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/errors.js"(exports) {
+  "node_modules/yaml/dist/errors.js"(exports) {
     "use strict";
     var YAMLError = class extends Error {
       constructor(name, pos, code, message) {
@@ -3808,9 +3834,9 @@ ${pointer}
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-props.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-props.js"(exports) {
     "use strict";
     function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
       let spaceBefore = false;
@@ -3942,9 +3968,9 @@ var require_resolve_props = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-contains-newline.js"(exports) {
+  "node_modules/yaml/dist/compose/util-contains-newline.js"(exports) {
     "use strict";
     function containsNewline(key) {
       if (!key)
@@ -3984,9 +4010,9 @@ var require_util_contains_newline = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports) {
+  "node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports) {
     "use strict";
     var utilContainsNewline = require_util_contains_newline();
     function flowIndentCheck(indent, fc, onError) {
@@ -4002,9 +4028,9 @@ var require_util_flow_indent_check = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-map-includes.js"(exports) {
+  "node_modules/yaml/dist/compose/util-map-includes.js"(exports) {
     "use strict";
     var identity = require_identity();
     function mapIncludes(ctx, items, search) {
@@ -4018,9 +4044,9 @@ var require_util_map_includes = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-map.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-block-map.js"(exports) {
     "use strict";
     var Pair = require_Pair();
     var YAMLMap = require_YAMLMap();
@@ -4126,9 +4152,9 @@ var require_resolve_block_map = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-seq.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-block-seq.js"(exports) {
     "use strict";
     var YAMLSeq = require_YAMLSeq();
     var resolveProps = require_resolve_props();
@@ -4177,9 +4203,9 @@ var require_resolve_block_seq = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-end.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-end.js"(exports) {
     "use strict";
     function resolveEnd(end, offset, reqSpace, onError) {
       let comment = "";
@@ -4220,9 +4246,9 @@ var require_resolve_end = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -4414,9 +4440,9 @@ var require_resolve_flow_collection = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-collection.js"(exports) {
+  "node_modules/yaml/dist/compose/compose-collection.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4479,9 +4505,9 @@ var require_compose_collection = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     function resolveBlockScalar(ctx, scalar, onError) {
@@ -4662,9 +4688,9 @@ var require_resolve_block_scalar = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports) {
+  "node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports) {
     "use strict";
     var Scalar = require_Scalar();
     var resolveEnd = require_resolve_end();
@@ -4882,9 +4908,9 @@ var require_resolve_flow_scalar = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-scalar.js"(exports) {
+  "node_modules/yaml/dist/compose/compose-scalar.js"(exports) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4963,9 +4989,9 @@ var require_compose_scalar = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports) {
+  "node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports) {
     "use strict";
     function emptyScalarPosition(offset, before, pos) {
       if (before) {
@@ -4993,9 +5019,9 @@ var require_util_empty_scalar_position = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-node.js"(exports) {
+  "node_modules/yaml/dist/compose/compose-node.js"(exports) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -5099,9 +5125,9 @@ var require_compose_node = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/compose-doc.js"(exports) {
+  "node_modules/yaml/dist/compose/compose-doc.js"(exports) {
     "use strict";
     var Document = require_Document();
     var composeNode = require_compose_node();
@@ -5142,9 +5168,9 @@ var require_compose_doc = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/compose/composer.js"(exports) {
+  "node_modules/yaml/dist/compose/composer.js"(exports) {
     "use strict";
     var node_process = __require("process");
     var directives = require_directives();
@@ -5350,9 +5376,9 @@ ${end.comment}` : end.comment;
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-scalar.js"(exports) {
+  "node_modules/yaml/dist/parse/cst-scalar.js"(exports) {
     "use strict";
     var resolveBlockScalar = require_resolve_block_scalar();
     var resolveFlowScalar = require_resolve_flow_scalar();
@@ -5535,9 +5561,9 @@ var require_cst_scalar = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-stringify.js"(exports) {
+  "node_modules/yaml/dist/parse/cst-stringify.js"(exports) {
     "use strict";
     var stringify = (cst) => "type" in cst ? stringifyToken(cst) : stringifyItem(cst);
     function stringifyToken(token) {
@@ -5596,9 +5622,9 @@ var require_cst_stringify = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst-visit.js"(exports) {
+  "node_modules/yaml/dist/parse/cst-visit.js"(exports) {
     "use strict";
     var BREAK = Symbol("break visit");
     var SKIP = Symbol("skip children");
@@ -5658,9 +5684,9 @@ var require_cst_visit = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/cst.js"(exports) {
+  "node_modules/yaml/dist/parse/cst.js"(exports) {
     "use strict";
     var cstScalar = require_cst_scalar();
     var cstStringify = require_cst_stringify();
@@ -5760,9 +5786,9 @@ var require_cst = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/lexer.js"(exports) {
+  "node_modules/yaml/dist/parse/lexer.js"(exports) {
     "use strict";
     var cst = require_cst();
     function isEmpty(ch) {
@@ -6349,9 +6375,9 @@ var require_lexer = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/line-counter.js"(exports) {
+  "node_modules/yaml/dist/parse/line-counter.js"(exports) {
     "use strict";
     var LineCounter = class {
       constructor() {
@@ -6380,9 +6406,9 @@ var require_line_counter = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/parse/parser.js"(exports) {
+  "node_modules/yaml/dist/parse/parser.js"(exports) {
     "use strict";
     var node_process = __require("process");
     var cst = require_cst();
@@ -7254,9 +7280,9 @@ var require_parser = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/public-api.js"(exports) {
+  "node_modules/yaml/dist/public-api.js"(exports) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7351,9 +7377,9 @@ var require_public_api = __commonJS({
   }
 });
 
-// ../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var require_dist = __commonJS({
-  "../../mnt/c/Users/butters/wrk/cycle/node_modules/yaml/dist/index.js"(exports) {
+  "node_modules/yaml/dist/index.js"(exports) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7650,9 +7676,11 @@ function killActiveChildren(sig) {
 function anyChildAlive() {
   for (const pid of active) {
     try {
-      process.kill(pid, 0);
+      process.kill(-pid, 0);
       return true;
-    } catch {
+    } catch (err) {
+      if (err.code === "ESRCH") continue;
+      return true;
     }
   }
   return false;
@@ -8694,9 +8722,9 @@ function findWorkflow(cfg2, workflowName) {
 function distinctAgents(cfg2, workflowName) {
   const known = new Set(knownAgents());
   const set = /* @__PURE__ */ new Set();
-  const wf = findWorkflow(cfg2, workflowName);
-  if (wf) {
-    for (const step of wf.steps) {
+  const wf2 = findWorkflow(cfg2, workflowName);
+  if (wf2) {
+    for (const step of wf2.steps) {
       if (step.agent !== "bash" && known.has(step.agent)) set.add(step.agent);
     }
   }
@@ -8706,9 +8734,9 @@ function distinctAgents(cfg2, workflowName) {
 }
 function detectTools(cfg2, workflowName) {
   const set = /* @__PURE__ */ new Set(["bash", "git"]);
-  const wf = findWorkflow(cfg2, workflowName);
-  if (wf) {
-    for (const step of wf.steps) {
+  const wf2 = findWorkflow(cfg2, workflowName);
+  if (wf2) {
+    for (const step of wf2.steps) {
       if (step.agent !== "bash") continue;
       const command = step.command?.trim();
       if (!command) continue;
@@ -9957,6 +9985,87 @@ var init_noop_marker = __esm({
   }
 });
 
+// src/engine/verify-counts.ts
+function parseVerifyCounts(output) {
+  if (typeof output !== "string" || output.length === 0) return null;
+  const ntTests = NODE_TESTS_RE.exec(output);
+  if (ntTests) {
+    const pass = num(NODE_PASS_RE, output);
+    const fail = num(NODE_FAIL_RE, output);
+    const skip = num(NODE_SKIP_RE, output);
+    const todo = num(NODE_TODO_RE, output);
+    const total = Number.parseInt(ntTests[1], 10);
+    return { executed: pass + fail, skipped: skip + todo, total };
+  }
+  const cg = CARGO_RE.exec(output);
+  if (cg) {
+    const passed = Number.parseInt(cg[1], 10);
+    const failed = Number.parseInt(cg[2], 10);
+    const ignored = Number.parseInt(cg[3], 10);
+    return { executed: passed + failed, skipped: ignored, total: passed + failed + ignored };
+  }
+  const clauseStr = JEST_RE.exec(output)?.[1] ?? PYTEST_RE.exec(output)?.[1] ?? null;
+  if (clauseStr) {
+    const c = parseClause(clauseStr);
+    if (c) return c;
+  }
+  const vt = VITEST_RE.exec(output);
+  if (vt) {
+    const c = parseClause(vt[1]);
+    if (c) return { executed: c.executed, skipped: c.skipped, total: Number.parseInt(vt[2], 10) };
+  }
+  return null;
+}
+function parseClause(s) {
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+  let total = null;
+  let saw = false;
+  for (const m of s.matchAll(/(\d+)\s+(passed|failed|skipped|ignored|todo|total)/g)) {
+    saw = true;
+    const n = Number.parseInt(m[1], 10);
+    switch (m[2]) {
+      case "passed":
+        passed = n;
+        break;
+      case "failed":
+        failed = n;
+        break;
+      case "skipped":
+      case "ignored":
+      case "todo":
+        skipped += n;
+        break;
+      case "total":
+        total = n;
+        break;
+    }
+  }
+  if (!saw) return null;
+  const executed = passed + failed;
+  return { executed, skipped, total: total ?? executed + skipped };
+}
+var JEST_RE, VITEST_RE, PYTEST_RE, CARGO_RE, NODE_TESTS_RE, NODE_PASS_RE, NODE_FAIL_RE, NODE_SKIP_RE, NODE_TODO_RE, num;
+var init_verify_counts = __esm({
+  "src/engine/verify-counts.ts"() {
+    "use strict";
+    JEST_RE = /Tests:\s+(.+)$/m;
+    VITEST_RE = /\bTests\s+(\d+ (?:passed|failed|skipped|todo)(?:\s*\|\s*\d+ \w+)*)\s*\((\d+)\)/;
+    PYTEST_RE = /=+\s*(.+?)\s+in\s+[\d.]+s\s*=+/;
+    CARGO_RE = /test result:\s*\w+\.\s*(\d+) passed;\s*(\d+) failed;\s*(\d+) ignored/;
+    NODE_TESTS_RE = /^# tests (\d+)/m;
+    NODE_PASS_RE = /^# pass (\d+)/m;
+    NODE_FAIL_RE = /^# fail (\d+)/m;
+    NODE_SKIP_RE = /^# skip (\d+)/m;
+    NODE_TODO_RE = /^# todo (\d+)/m;
+    num = (re, s) => {
+      const m = re.exec(s);
+      return m ? Number.parseInt(m[1], 10) : 0;
+    };
+  }
+});
+
 // src/engine/walkthrough.ts
 import { spawn as spawn4 } from "node:child_process";
 import { existsSync as existsSync3 } from "node:fs";
@@ -10067,10 +10176,51 @@ var init_walkthrough = __esm({
   }
 });
 
+// src/engine/walkthrough-gate.ts
+import { readFile as readFile14 } from "node:fs/promises";
+function resolveWalkthroughRequired(cfg2) {
+  return cfg2?.engine?.walkthrough_required === true;
+}
+function resolveExpectsUi(fm) {
+  return fm?.expects_ui === false ? false : true;
+}
+function classifyWalkthroughDegradation(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return { degraded: true, reason: `unparseable: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { degraded: true, reason: "unparseable: sidecar is not a JSON object" };
+  }
+  const rec = parsed;
+  if (rec.degraded === true) {
+    const hookReason = typeof rec.reason === "string" && rec.reason.trim() ? rec.reason.trim() : void 0;
+    return { degraded: true, reason: hookReason ? `degraded_flag: ${hookReason}` : "degraded_flag" };
+  }
+  return { degraded: false };
+}
+async function readWalkthroughDegradation(sidecarPath) {
+  let text;
+  try {
+    text = await readFile14(sidecarPath, "utf8");
+  } catch (err) {
+    if (err?.code === "ENOENT") return { degraded: false };
+    return { degraded: true, reason: `unparseable: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  return classifyWalkthroughDegradation(text);
+}
+var init_walkthrough_gate = __esm({
+  "src/engine/walkthrough-gate.ts"() {
+    "use strict";
+  }
+});
+
 // src/engine/run-cycle.ts
-import { writeFile as writeFile10, readFile as readFile14, stat as stat6 } from "node:fs/promises";
+import { writeFile as writeFile10, readFile as readFile15, stat as stat6 } from "node:fs/promises";
 import { existsSync as existsSync4 } from "node:fs";
-import { join as join23 } from "node:path";
+import { join as join23, relative as relative2 } from "node:path";
 import { spawnSync as spawnSync5 } from "node:child_process";
 function parseSnapshotPaths(snapshot) {
   const paths = /* @__PURE__ */ new Set();
@@ -10127,7 +10277,7 @@ function parseTouchedFilesSection(text) {
 async function appendDocumentationPaths(repoRoot, buildMdPath, log2, cycleId, preSnapshot) {
   let text;
   try {
-    text = await readFile14(buildMdPath, "utf8");
+    text = await readFile15(buildMdPath, "utf8");
   } catch {
     return;
   }
@@ -10168,7 +10318,7 @@ async function accumulateTouchedFiles(repoRoot, artifactDir, preSnapshot) {
   const touchedPath = join23(artifactDir, "touched.json");
   let existing = [];
   try {
-    const raw = await readFile14(touchedPath, "utf8");
+    const raw = await readFile15(touchedPath, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed.files)) existing = parsed.files;
   } catch {
@@ -10180,7 +10330,7 @@ async function recoverTouchedFiles(repoRoot, artifactDir, log2, cycleId) {
   const touchedPath = join23(artifactDir, "touched.json");
   let existing = [];
   try {
-    const raw = await readFile14(touchedPath, "utf8");
+    const raw = await readFile15(touchedPath, "utf8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed.files)) existing = parsed.files;
   } catch {
@@ -10188,7 +10338,7 @@ async function recoverTouchedFiles(repoRoot, artifactDir, log2, cycleId) {
   if (existing.length > 0) return;
   let declared = /* @__PURE__ */ new Set();
   try {
-    declared = parseTouchedFilesSection(await readFile14(join23(artifactDir, "BUILD.md"), "utf8"));
+    declared = parseTouchedFilesSection(await readFile15(join23(artifactDir, "BUILD.md"), "utf8"));
   } catch {
   }
   const status = spawnSync5("git", ["status", "--porcelain"], { cwd: repoRoot, encoding: "utf8", shell: false });
@@ -10208,7 +10358,7 @@ async function recoverTouchedFiles(repoRoot, artifactDir, log2, cycleId) {
 }
 async function classifyArtifact(artifactPath) {
   try {
-    const content = await readFile14(artifactPath, "utf8");
+    const content = await readFile15(artifactPath, "utf8");
     return content.trim().length === 0 ? "empty" : "nonempty";
   } catch {
     return "empty";
@@ -10238,10 +10388,16 @@ function formatTimeoutProofError(stepName, artifactPath, exitCode) {
 function formatWalkthroughTimeoutError(stepName, exitCode) {
   return `${stepName} timed out (exit ${exitCode}) \u2014 hook killed (SIGTERM\u2192SIGKILL) \u2014 treating as failure`;
 }
+function formatWalkthroughDegradedError(reason) {
+  return `walkthrough did not demonstrate the feature: ${reason} \u2014 failing cycle (engine.walkthrough_required)`;
+}
+function formatVerifyUnverifiedError(skipped, executed) {
+  return `verification incomplete: ${skipped} tests skipped, ${executed} executed \u2014 cannot confirm the app works`;
+}
 async function findPriorStepHeadSha(repoRoot, cycleId, stepName) {
   let text;
   try {
-    text = await readFile14(join23(repoRoot, ".cycle", "log.jsonl"), "utf8");
+    text = await readFile15(join23(repoRoot, ".cycle", "log.jsonl"), "utf8");
   } catch {
     return null;
   }
@@ -10268,8 +10424,8 @@ async function runCycle(repoRoot, opts) {
   const slug = slugify(opts.title);
   const mergedEnv = opts.env ? { ...process.env, ...opts.env } : void 0;
   const cfg2 = await loadConfig(repoRoot, mergedEnv);
-  const wf = cfg2.workflows.find((w) => w.name === opts.workflow);
-  if (!wf) throw new Error(`unknown workflow: ${opts.workflow}`);
+  const wf2 = cfg2.workflows.find((w) => w.name === opts.workflow);
+  if (!wf2) throw new Error(`unknown workflow: ${opts.workflow}`);
   let artifactDir;
   if (opts.resume) {
     await log2.emit("cycle.resume", {
@@ -10304,7 +10460,7 @@ async function runCycle(repoRoot, opts) {
   try {
     const startIdx = opts.resume?.startStepIndex ?? 0;
     if (opts.resume) {
-      const maxResetIdx = wf.steps.reduce(
+      const maxResetIdx = wf2.steps.reduce(
         (max, s, idx) => RESET_ELIGIBLE_STEPS.has(s.name) ? idx : max,
         -1
       );
@@ -10317,8 +10473,8 @@ async function runCycle(repoRoot, opts) {
     }
     const attempt = opts.attempt ?? 0;
     const skipEnabled = opts.skipCompletedOnRetry !== false;
-    for (let i = startIdx; i < wf.steps.length; i++) {
-      const step = wf.steps[i];
+    for (let i = startIdx; i < wf2.steps.length; i++) {
+      const step = wf2.steps[i];
       const stepStart = nowFn();
       let headSha = null;
       const isResetEligible = RESET_ELIGIBLE_STEPS.has(step.name);
@@ -10391,6 +10547,41 @@ ${wr.stderr}`, MAX_STEP_END_STDERR) : truncateHeadCapped(wr.stderr, MAX_STEP_END
           });
           await log2.emit("cycle.end", { cycle_id: cycleId, status: "failed", failing_step: step.name });
           return { cycleId, artifactDir, status: "failed", failingStep: step.name };
+        }
+        if (phase === void 0 && resolveWalkthroughRequired(cfg2)) {
+          let uiShipping = true;
+          try {
+            const issueBody = await readFile15(
+              join23(repoRoot, "docs/cycle/issues/todo", `${opts.issueId}.md`),
+              "utf8"
+            );
+            const fm = parseFrontmatter(issueBody).fm;
+            uiShipping = resolveExpectsCode(fm) !== false && resolveExpectsUi(fm) !== false;
+          } catch {
+            uiShipping = true;
+          }
+          if (uiShipping) {
+            const sidecarPath = join23(artifactDir, WALKTHROUGH_MEDIA_DIRNAME, "walkthrough-status.json");
+            const verdict = await readWalkthroughDegradation(sidecarPath);
+            if (verdict.degraded) {
+              await log2.emit("walkthrough.degraded", {
+                cycle_id: cycleId,
+                step: step.name,
+                reason: verdict.reason,
+                sidecar: relative2(repoRoot, sidecarPath)
+              });
+              await log2.emit("step.end", {
+                cycle_id: cycleId,
+                step: step.name,
+                status: "failed",
+                exit_code: wr.exitCode,
+                duration_ms: Math.max(0, Math.round(nowFn() - stepStart)),
+                stderr: truncateHeadCapped(formatWalkthroughDegradedError(verdict.reason), MAX_STEP_END_STDERR)
+              });
+              await log2.emit("cycle.end", { cycle_id: cycleId, status: "failed", failing_step: step.name });
+              return { cycleId, artifactDir, status: "failed", failingStep: step.name };
+            }
+          }
         }
         let walkthroughArtifact;
         try {
@@ -10552,7 +10743,7 @@ ${wr.stderr}`, MAX_STEP_END_STDERR) : truncateHeadCapped(wr.stderr, MAX_STEP_END
               const mustFixPath = join23(artifactDir, "MUST-FIX.md");
               let mustFixContent = "";
               try {
-                mustFixContent = await readFile14(mustFixPath, "utf8");
+                mustFixContent = await readFile15(mustFixPath, "utf8");
               } catch {
               }
               const taskCount = mustFixContent.split("\n").filter((l) => /^\s*[-*]\s*\[/.test(l)).length;
@@ -10574,9 +10765,6 @@ ${wr.stderr}`, MAX_STEP_END_STDERR) : truncateHeadCapped(wr.stderr, MAX_STEP_END
               r.status = "failed";
               r.exitCode = r.exitCode || 1;
               r.stderr = proofError;
-            } else if (r.timedOut) {
-              r.status = "ok";
-              await log2.emit("step.timeout_salvaged", { cycle_id: cycleId, step: step.name, artifact: artifactPath });
             }
           }
           if (r.status === "ok" && (step.name === "build" || step.name === "fix")) {
@@ -10588,7 +10776,7 @@ ${wr.stderr}`, MAX_STEP_END_STDERR) : truncateHeadCapped(wr.stderr, MAX_STEP_END
             if (!changed.stdout || !changed.stdout.trim()) {
               let expectsCode = true;
               try {
-                const issueBody = await readFile14(
+                const issueBody = await readFile15(
                   join23(repoRoot, "docs/cycle/issues/todo", `${opts.issueId}.md`),
                   "utf8"
                 );
@@ -10657,6 +10845,29 @@ ${wr.stderr}`, MAX_STEP_END_STDERR) : truncateHeadCapped(wr.stderr, MAX_STEP_END
             await accumulateTouchedFiles(repoRoot, artifactDir, preSnapshot);
           } catch {
           }
+        }
+      }
+      if (step.agent === "bash" && r.status === "ok" && (step.name === "verify" || step.name === "final_verify")) {
+        const rawFloor = cfg2.engine.verify_min_executed;
+        const minExecuted = typeof rawFloor === "number" && Number.isInteger(rawFloor) && rawFloor >= 0 ? rawFloor : 1;
+        let counts = null;
+        try {
+          counts = parseVerifyCounts(r.stdout);
+        } catch {
+          counts = null;
+        }
+        if (counts && counts.executed < minExecuted && (counts.skipped > 0 || counts.total > 0)) {
+          await log2.emit("verify.unverified", {
+            cycle_id: cycleId,
+            step: step.name,
+            executed: counts.executed,
+            skipped: counts.skipped,
+            total: counts.total,
+            reason: "zero_executed"
+          });
+          r.status = "failed";
+          r.exitCode = r.exitCode || 1;
+          r.stderr = formatVerifyUnverifiedError(counts.skipped, counts.executed);
         }
       }
       let stdoutArtifact;
@@ -10766,8 +10977,10 @@ var init_run_cycle = __esm({
     init_compress_filter();
     init_path_utils();
     init_noop_marker();
+    init_verify_counts();
     init_frontmatter();
     init_walkthrough();
+    init_walkthrough_gate();
     RESET_ELIGIBLE_STEPS = /* @__PURE__ */ new Set(["build", "fix", "final_fix", "quick_fix", "test_fix", "test_build"]);
     WALKTHROUGH_PHASES = /* @__PURE__ */ new Map([
       ["walkthrough_capture", void 0],
@@ -10938,7 +11151,7 @@ __export(cleanup_exports, {
   runCliCleanup: () => runCliCleanup,
   runCliCleanupWithDeps: () => runCliCleanupWithDeps
 });
-import { readFile as readFile15 } from "node:fs/promises";
+import { readFile as readFile16 } from "node:fs/promises";
 import { join as join24 } from "node:path";
 async function resolveBranchName(root, rowId, rowTitle, readTodoFile) {
   for (const dir of ISSUE_DIRS) {
@@ -11026,7 +11239,7 @@ async function runCliCleanup(repoRoot, argv2) {
     readQueue,
     readTodoFile: async (root, relId) => {
       try {
-        return await readFile15(join24(root, "docs/cycle/issues", relId + ".md"), "utf8");
+        return await readFile16(join24(root, "docs/cycle/issues", relId + ".md"), "utf8");
       } catch {
         return null;
       }
@@ -11097,26 +11310,9 @@ Run \`cycle init\` first if this repo is not initialized.`,
       exitCode: 1
     };
   }
-  const available = cfg2.workflows.map((w) => w.name);
-  const availableList = available.join(", ");
-  let effective;
-  if (workflow === void 0) {
-    effective = "feature";
-  } else if (workflow === "") {
-    return {
-      stdout: "",
-      stderr: `doctor: --workflow requires a value \u2014 available workflows: ${availableList}`,
-      exitCode: 1
-    };
-  } else if (!available.includes(workflow)) {
-    return {
-      stdout: "",
-      stderr: `doctor: unknown workflow "${workflow}" \u2014 available workflows: ${availableList}`,
-      exitCode: 1
-    };
-  } else {
-    effective = workflow;
-  }
+  const v = validateWorkflowName(workflow, cfg2.workflows.map((w) => w.name), "doctor");
+  if (!v.ok) return { stdout: "", stderr: v.message, exitCode: 1 };
+  const effective = v.name;
   const result = runPreflight({ cfg: cfg2, workflowName: effective, env: sourceEnv });
   return { stdout: renderReport(result), stderr: "", exitCode: result.ok ? 0 : 1 };
 }
@@ -11125,6 +11321,7 @@ var init_doctor = __esm({
     "use strict";
     init_workflow();
     init_preflight();
+    init_validate_workflow();
   }
 });
 
@@ -11228,7 +11425,7 @@ var init_compress_output_hook = __esm({
 // src/cli.ts
 init_child_env();
 import { appendFileSync, realpathSync } from "node:fs";
-import { readFile as readFile16, readdir as readdir6, rename as rename7, mkdir as mkdir9 } from "node:fs/promises";
+import { readFile as readFile17, readdir as readdir6, rename as rename7, mkdir as mkdir9 } from "node:fs/promises";
 import { join as join25 } from "node:path";
 import { spawn as spawn5 } from "node:child_process";
 
@@ -11237,13 +11434,14 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname as dirname2, resolve } from "node:path";
 async function getVersion() {
-  if (true) return "0.2.0";
+  if (true) return "0.3.0";
   const pkgPath = resolve(dirname2(fileURLToPath(import.meta.url)), "..", "package.json");
   const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
   return pkg.version;
 }
 
 // src/cli/parse-args.ts
+init_validate_workflow();
 import { parseArgs as nodeParseArgs } from "node:util";
 function parseArgs(argv2) {
   if (argv2[0] === "drop") {
@@ -11264,10 +11462,24 @@ function parseArgs(argv2) {
     return { command: "drop", text: text2 };
   }
   if (argv2.length > 0 && argv2[0] !== "run") throw new Error(`unknown command: ${argv2[0]}`);
+  const runArgv = argv2.slice(1);
+  const eqIdx = runArgv.findIndex((a) => a.startsWith("--workflow="));
+  const spaceIdx = runArgv.indexOf("--workflow");
+  let workflowExplicit;
+  let nodeArgs;
+  if (eqIdx >= 0) {
+    workflowExplicit = runArgv[eqIdx].slice("--workflow=".length);
+    nodeArgs = runArgv.filter((_, i) => i !== eqIdx);
+  } else if (spaceIdx >= 0) {
+    workflowExplicit = runArgv[spaceIdx + 1] ?? "";
+    nodeArgs = runArgv.filter((_, i) => i !== spaceIdx && i !== spaceIdx + 1);
+  } else {
+    workflowExplicit = void 0;
+    nodeArgs = runArgv;
+  }
   const { values, positionals } = nodeParseArgs({
-    args: argv2.slice(1),
+    args: nodeArgs,
     options: {
-      workflow: { type: "string", default: "feature" },
       "dry-run": { type: "boolean", default: false },
       "no-skip-completed": { type: "boolean", default: false },
       trunk: { type: "boolean", default: false },
@@ -11280,13 +11492,17 @@ function parseArgs(argv2) {
   return {
     command: "run",
     text: text === "" ? null : text,
-    workflow: String(values.workflow),
+    workflow: workflowExplicit === void 0 ? DEFAULT_WORKFLOW : workflowExplicit,
+    workflowExplicit,
     dryRun: Boolean(values["dry-run"]),
     noSkipCompleted: Boolean(values["no-skip-completed"]),
     trunk: Boolean(values.trunk),
     skipPreflight: Boolean(values["skip-preflight"])
   };
 }
+
+// src/cli.ts
+init_validate_workflow();
 
 // src/issue/materialize.ts
 init_id();
@@ -11409,10 +11625,10 @@ async function buildClosesBlock(issueId, repoRoot, envExtra, spawn6 = defaultSpa
   const lines = [];
   let m;
   while ((m = urlRe.exec(body)) !== null) {
-    const [, owner, repo, num] = m;
-    if (`${owner}/${repo}` === repoSlug && !seen.has(num)) {
-      seen.add(num);
-      lines.push(`Closes #${num}`);
+    const [, owner, repo, num2] = m;
+    if (`${owner}/${repo}` === repoSlug && !seen.has(num2)) {
+      seen.add(num2);
+      lines.push(`Closes #${num2}`);
     }
   }
   return lines.join("\n");
@@ -12016,10 +12232,10 @@ function releaseLock(lockPath2, deps = defaultDeps2) {
 // src/engine/dot-env.ts
 import { readFileSync as readFileSync4 } from "node:fs";
 var defaultReadFile = (filePath) => readFileSync4(filePath, "utf8");
-function loadDotEnv(filePath, readFile17 = defaultReadFile) {
+function loadDotEnv(filePath, readFile18 = defaultReadFile) {
   let content;
   try {
-    content = readFile17(filePath);
+    content = readFile18(filePath);
   } catch (e) {
     const err = e;
     if (err.code !== "ENOENT") {
@@ -12228,6 +12444,12 @@ await mkdir9(failedDir, { recursive: true });
 if (args.trunk) process.env.CYCLE_TRUNK_BASED = "1";
 loadDotEnv(join25(cwd, ".cycle", ".env"));
 var cfg = await loadConfig(cwd);
+var wf = validateWorkflowName(args.workflowExplicit, cfg.workflows.map((w) => w.name), "run");
+if (!wf.ok) {
+  console.error(wf.message);
+  process.exit(2);
+}
+args.workflow = wf.name;
 var skipCompletedOnRetry = args.noSkipCompleted ? false : cfg?.engine?.skip_completed_on_retry ?? true;
 await emitStaleDistWarning(log, processStart, cwd);
 await log.emit("engine.start", { skip_completed_on_retry: skipCompletedOnRetry });
@@ -12381,7 +12603,7 @@ function spawnRunOne(params) {
 async function runResumeOnce(cwd2, log2, cfg2, args2, tail, todoDir2, doneDir2, failedDir2) {
   let fmBaseBranch;
   try {
-    const body = await readFile16(join25(todoDir2, `${tail.issueId}.md`), "utf8");
+    const body = await readFile17(join25(todoDir2, `${tail.issueId}.md`), "utf8");
     const { fm } = parseFrontmatter(body);
     fmBaseBranch = typeof fm.base_branch === "string" && fm.base_branch.length > 0 ? fm.base_branch : void 0;
   } catch {
@@ -12414,21 +12636,23 @@ async function runResumeOnce(cwd2, log2, cfg2, args2, tail, todoDir2, doneDir2, 
   if (!baseOk) return { processed: 0, outcome: "skipped" };
   let workflowName = tail.workflow || args2.workflow;
   try {
-    const body = await readFile16(join25(todoDir2, `${tail.issueId}.md`), "utf8");
+    const body = await readFile17(join25(todoDir2, `${tail.issueId}.md`), "utf8");
     const { fm } = parseFrontmatter(body);
     if (typeof fm.workflow === "string" && fm.workflow.length > 0) {
       workflowName = fm.workflow;
     }
   } catch {
   }
-  const wfDef = cfg2.workflows.find((w) => w.name === workflowName);
-  if (!wfDef) {
+  const wfv = validateWorkflowName(workflowName, cfg2.workflows.map((w) => w.name), "run");
+  if (!wfv.ok) {
+    process.stderr.write(wfv.message + "\n");
     await log2.emit("engine.warning", {
       reason: "resume_workflow_missing",
       workflow: workflowName
     });
     return { processed: 0, outcome: "skipped" };
   }
+  const wfDef = cfg2.workflows.find((w) => w.name === wfv.name);
   const stepNames = wfDef.steps.map((s) => s.name);
   let startStepIndex = stepNames.length;
   for (let i = 0; i < stepNames.length; i++) {
@@ -12634,7 +12858,7 @@ while (!halted) {
   let workflowName = args.workflow;
   let fmBaseBranch;
   try {
-    const body = await readFile16(todoPath, "utf8");
+    const body = await readFile17(todoPath, "utf8");
     const { fm } = parseFrontmatter(body);
     if (typeof fm.workflow === "string" && fm.workflow.length > 0) {
       workflowName = fm.workflow;
@@ -12643,6 +12867,19 @@ while (!halted) {
       fmBaseBranch = fm.base_branch;
     }
   } catch {
+  }
+  const wfv = validateWorkflowName(workflowName, cfg.workflows.map((w) => w.name), "run");
+  if (!wfv.ok) {
+    process.stderr.write(wfv.message + "\n");
+    await log.emit("engine.halted", {
+      reason: "unknown_workflow",
+      workflow: workflowName,
+      issue_id: row.id
+    });
+    halted = true;
+    haltReason = "unknown_workflow";
+    activeCycleId = void 0;
+    break;
   }
   const wfCfg = cfg?.workflows.find((w) => w.name === workflowName);
   const rawMax = wfCfg?.max_cycle_attempts ?? 3;
@@ -12808,6 +13045,7 @@ if (!engineStopEmitted) {
     dry_run: false,
     cycles_processed: cyclesProcessed,
     ...halted && haltReason === "triage_failed" ? { reason: "triage_failed" } : {},
+    ...halted && haltReason === "unknown_workflow" ? { reason: "unknown_workflow" } : {},
     ...halted && lastHaltContext ? { halted_at_issue: lastHaltContext.issueId, failing_step: lastHaltContext.failingStep } : {}
   });
 }

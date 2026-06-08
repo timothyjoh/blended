@@ -13,7 +13,7 @@ import { adminAvailable, freshEmail, queryAdmin, signInViaUi } from './support/a
 test.describe('global uber-admin: allowlist bootstrap + /admin authorization', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — admin-route e2e requires admin code minting + the admin query seam against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — admin-route e2e requires admin code minting + the admin query seam against the live app'
   )
 
   const ALLOWLISTED = 'admin@blended.test'

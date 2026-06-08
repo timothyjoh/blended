@@ -22,7 +22,7 @@ import { adminAvailable, freshEmail, signInViaUi } from './support/auth'
 test.describe('teacher dashboard session list + open', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — dashboard-session-list e2e requires admin code minting + live-app realtime'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — dashboard-session-list e2e requires admin code minting + live-app realtime'
   )
 
   /** Open `/dashboard` (already signed in) and wait for the shell + list to hydrate. */

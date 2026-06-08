@@ -21,7 +21,7 @@ const runnerPath = fileURLToPath(new URL('../scripts/push-schema.mjs', import.me
 test.describe('schema push → live writeEvent accepted', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — live schema-push verification requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — live schema-push verification requires admin code minting + observability queries against the live app'
   )
 
   test('after schema:push, a writeEvent() transaction is accepted by the live app', async ({

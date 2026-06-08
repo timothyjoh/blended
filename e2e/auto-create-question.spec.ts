@@ -22,7 +22,7 @@ import { adminAvailable, freshEmail, signInViaUi, queryAdmin } from './support/a
 test.describe('auto-create a Question from messages ending in "?"', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — auto-create-question e2e requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — auto-create-question e2e requires admin code minting + observability queries against the live app'
   )
 
   /** Sign a fresh teacher in, create a session, return its admin-queryable title. */

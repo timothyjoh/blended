@@ -236,7 +236,7 @@
   `created-session-joincode`.
 - New unit suite `src/lib/sessions.test.ts` and e2e suite
   `e2e/create-session.spec.ts` (adds the `queryAdmin` admin-read helper; reuses
-  `INSTANT_ADMIN_TOKEN`, skips loudly when unset). No new env vars.
+  `INSTANTDB_ADMIN_TOKEN`, skips loudly when unset). No new env vars.
 
 ## Cycle 0004 — Route guarding + role-aware routing
 
@@ -257,7 +257,7 @@
   `/dashboard` and `/dashboard/sessions/[id]`.
 - **Reused testids for downstream cycles:** `route-guard-loading`,
   `route-guard-denied`, `dashboard-root`, `session-root`.
-- New e2e suite `e2e/route-guarding.spec.ts` (reuses `INSTANT_ADMIN_TOKEN`;
+- New e2e suite `e2e/route-guarding.spec.ts` (reuses `INSTANTDB_ADMIN_TOKEN`;
   skips loudly when unset). No new env vars.
 
 ## Cycle 0002 — Email magic-code authentication
@@ -271,7 +271,7 @@
   id (`username` = email local-part, `adminLevel: 0`), routed through
   `writeEvent()` under the reserved `IDENTITY_SCOPE` sentinel — idempotent across
   repeat sign-ins.
-- **New env var (e2e-only): `INSTANT_ADMIN_TOKEN`.** Used by the Playwright auth
+- **New env var (e2e-only): `INSTANTDB_ADMIN_TOKEN`.** Used by the Playwright auth
   suite to mint deterministic magic codes via `@instantdb/admin` (no email
   sent). Never used by client/product code. When unset, `e2e/auth.spec.ts` skips
   loudly. Added `@instantdb/admin` as a devDependency. See `.env.example`.

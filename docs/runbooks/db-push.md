@@ -47,12 +47,12 @@ loudly (non-zero, with an actionable message) rather than reporting false succes
 
 ```sh
 export PUBLIC_INSTANTDB_APP_ID=<the live app id>
-export INSTANT_ADMIN_TOKEN=<the live app admin token>
+export INSTANTDB_ADMIN_TOKEN=<the live app admin token>
 ```
 
 - `PUBLIC_INSTANTDB_APP_ID` — consumed by both pushes. If missing or empty, the run
   exits non-zero **before any network call** and never reaches the perms step.
-- `INSTANT_ADMIN_TOKEN` — required by the permissions e2e suite in step 4 (not by the
+- `INSTANTDB_ADMIN_TOKEN` — required by the permissions e2e suite in step 4 (not by the
   pushes themselves).
 
 ### 3. Push schema + perms in one command
@@ -85,14 +85,14 @@ schema/ruleset rejection) and **re-run `npm run db:push`** — it is safe to re-
 
 ### 4. Prove the permission rules end-to-end
 
-With `INSTANT_ADMIN_TOKEN` (and `PUBLIC_INSTANTDB_APP_ID`) still set, run the
+With `INSTANTDB_ADMIN_TOKEN` (and `PUBLIC_INSTANTDB_APP_ID`) still set, run the
 credentialed permissions suite:
 
 ```sh
 npm run test:e2e -- e2e/permissions.spec.ts
 ```
 
-This suite **skips loudly** when `INSTANT_ADMIN_TOKEN` is absent. The deploy is only
+This suite **skips loudly** when `INSTANTDB_ADMIN_TOKEN` is absent. The deploy is only
 verified when:
 
 - **0 tests are skipped** (i.e. it actually ran against the live app, not skipped), and

@@ -13,7 +13,7 @@ function freshSessionId(): string {
 // and skip loudly without it. The invalid-write test stays ungated — it asserts
 // the SYNCHRONOUS `writeEvent` validation, which throws before any transaction
 // and exercises no permission rule.
-const NEEDS_AUTH = 'INSTANT_ADMIN_TOKEN unset — harness writes require an authenticated owner under perms'
+const NEEDS_AUTH = 'INSTANTDB_ADMIN_TOKEN unset — harness writes require an authenticated owner under perms'
 
 async function gotoHarness(page: Page, sessionId: string) {
   await page.goto(`/dev/event-spine?sessionId=${sessionId}`)

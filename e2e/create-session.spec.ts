@@ -14,7 +14,7 @@ import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH } from '../src/lib/sessions'
 test.describe('teacher creates a session (draft)', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — create-session e2e requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — create-session e2e requires admin code minting + observability queries against the live app'
   )
 
   test('signed-in user creates a draft session, sees it, and it is recorded', async ({ page }) => {

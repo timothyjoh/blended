@@ -26,7 +26,7 @@ import { adminAvailable, freshEmail, signInViaUi, queryAdmin } from './support/a
 test.describe('teacher activates a resource, students render it live', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — activate-resource e2e requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — activate-resource e2e requires admin code minting + observability queries against the live app'
   )
 
   /** Sign a fresh teacher in, create a session, land on its detail page; returns the title. */

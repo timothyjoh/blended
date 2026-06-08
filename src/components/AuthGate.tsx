@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/lib/useAuth'
 import { isValidEmail } from '@/lib/auth'
+import { isEnabledFlag } from '@/lib/devAuth'
 import { safeNextPath } from '@/lib/routing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,7 @@ export default function AuthGate() {
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
+  const [devSecret, setDevSecret] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   // One-shot latch so the post-sign-in redirect fires once, not on every
@@ -47,6 +49,19 @@ export default function AuthGate() {
     const message = err instanceof Error ? err.message : String(err)
     setFormError(message)
     console.error('[AuthGate]', err)
+  }
+
+  async function requestDevCode(addr: string): Promise<string> {
+    const response = await fetch('/api/auth/dev-code', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: addr, secret: devSecret }),
+    })
+    const body = (await response.json().catch(() => ({}))) as { code?: string; error?: string }
+    if (!response.ok || !body.code) {
+      throw new Error(body.error ? `Developer login failed: ${body.error}` : 'Developer login failed')
+    }
+    return body.code
   }
 
   async function onSendCode(e: React.FormEvent) {
@@ -91,6 +106,30 @@ export default function AuthGate() {
     setPending(true)
     try {
       await sendCode(email)
+    } catch (err) {
+      surface(err)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function onDevSignIn() {
+    setFormError(null)
+    const normalizedEmail = email.trim()
+    if (!isValidEmail(normalizedEmail)) {
+      setFormError('Enter a valid email address')
+      return
+    }
+    if (!devSecret.trim()) {
+      setFormError('Enter the developer login secret')
+      return
+    }
+
+    setPending(true)
+    try {
+      const mintedCode = await requestDevCode(normalizedEmail)
+      setCode(mintedCode)
+      await verifyCode(normalizedEmail, mintedCode)
     } catch (err) {
       surface(err)
     } finally {
@@ -193,6 +232,30 @@ export default function AuthGate() {
       <Button data-testid="auth-send" type="submit" disabled={pending}>
         {pending ? 'Sending…' : 'Send code'}
       </Button>
+      {isEnabledFlag(import.meta.env.PUBLIC_DEV_LOGIN_ENABLED) ? (
+        <div className="mt-2 flex flex-col gap-3 border-t border-border pt-4">
+          <label htmlFor="auth-dev-secret" className="text-sm font-medium">
+            Developer login secret
+          </label>
+          <Input
+            id="auth-dev-secret"
+            data-testid="auth-dev-secret-input"
+            type="password"
+            autoComplete="off"
+            value={devSecret}
+            onChange={(e) => setDevSecret(e.target.value)}
+          />
+          <Button
+            data-testid="auth-dev-signin"
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={onDevSignIn}
+          >
+            {pending ? 'Signing in…' : 'Developer sign in'}
+          </Button>
+        </div>
+      ) : null}
       {errorEl}
     </form>
   )

@@ -18,18 +18,11 @@ whichever of these files exist:
 - `REVIEW.md` — staff-engineer review findings.
 - `MUST-FIX.md` (may be absent) — required fixes called out by review.
 - `FIX.md` (may be absent) — what was fixed in response.
-- `walkthrough-errors.json` (and any `walkthrough-<phase>-errors.json`,
-  may be absent) — the walkthrough runner's degradation sidecar:
-  `{ degraded, reason, errors }`.
 
 Then inspect:
 
 - `git diff "${CYCLE_BASE}"...HEAD` — the actual code change shipped.
 - `tail -n 200 .cycle/log.jsonl` — recent engine events for this cycle.
-- The cycle workflow is the second hyphen-delimited token of the
-  artifact directory name (`<id>-<workflow>-<slug>`), e.g.
-  `basename "$PWD"` → `0011-feature-…` ⇒ workflow `feature`. (There is no
-  `CYCLE_WORKFLOW` env var.)
 
 ## What counts as a sharp edge
 
@@ -50,16 +43,6 @@ Anything a future cycle will trip over if left unaddressed:
   no-silent-failure and missing failure-path tests to `defer` (medium+)
   or `fix_now` if mechanical; route idempotency/observability trade-offs
   to `discuss`.
-- **Degraded walkthrough on a UI-shipping `feature` cycle.** If this is a
-  `feature` cycle (per the artifact-dir name) and
-  `git diff "${CYCLE_BASE}"...HEAD` touches observable UI (`src/components/`
-  or `src/pages/`), read `walkthrough-errors.json`; when it reports
-  `degraded: true`, the cycle shipped UI but its walkthrough is only the
-  home-page fallback (the `reason` is in the sidecar). Surface this as a
-  sharp edge routed to `defer` with `priority: "high"` so the missing real
-  walkthrough is filed, not silently shipped. Do **not** surface it when the
-  diff ships no observable UI (a degraded walkthrough is then legitimate),
-  nor for non-`feature` workflows.
 - Documentation drift: CLAUDE.md / RFC docs that the diff makes stale.
 - Mechanical corrections in files already touched this cycle that require
   no design decision (candidates for `fix_now`).

@@ -18,7 +18,7 @@ import { adminAvailable, freshEmail, signInViaUi, queryAdmin } from './support/a
 test.describe('teacher starts / ends a session (lifecycle)', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — session-lifecycle e2e requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — session-lifecycle e2e requires admin code minting + observability queries against the live app'
   )
 
   async function createSessionAndOpen(page: import('@playwright/test').Page): Promise<string> {

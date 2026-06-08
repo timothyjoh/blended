@@ -9,7 +9,7 @@ import { adminAvailable, freshEmail, mintCode, signInViaUi } from './support/aut
 test.describe('route guarding + role-aware routing', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — route-guard e2e requires admin code minting against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — route-guard e2e requires admin code minting against the live app'
   )
 
   function freshSessionId(): string {

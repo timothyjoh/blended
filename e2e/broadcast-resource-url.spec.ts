@@ -29,7 +29,7 @@ import { adminAvailable, freshEmail, signInViaUi, queryAdmin } from './support/a
 test.describe('teacher broadcasts a URL, students follow + re-sync live', () => {
   test.skip(
     !adminAvailable(),
-    'INSTANT_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — broadcast-resource-url e2e requires admin code minting + observability queries against the live app'
+    'INSTANTDB_ADMIN_TOKEN (and PUBLIC_INSTANTDB_APP_ID) unset — broadcast-resource-url e2e requires admin code minting + observability queries against the live app'
   )
 
   /** Sign a fresh teacher in, create a session, land on its detail page; returns the title. */

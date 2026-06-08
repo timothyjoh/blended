@@ -88,14 +88,14 @@ links/attrs, so the schema must be live first.
 > The full operator procedure (auth → env → `db:push` → credentialed
 > `e2e/permissions.spec.ts` to 0-skipped) is in
 > **[`docs/runbooks/db-push.md`](docs/runbooks/db-push.md)**.
-No new required environment variable is introduced (the e2e-only
-`INSTANT_ADMIN_TOKEN`, used by the permissions Playwright suite, is already
+No new required environment variable is introduced (`INSTANTDB_ADMIN_TOKEN`,
+used by server admin routes and credentialed Playwright suites, is already
 documented below).
 
 > **Not yet live.** These rules ship in the repo but are **inert until an
 > operator pushes them**. Until `npm run schema:push` and
 > `npm run perms:push` have been run against the app, in that order (and `e2e/permissions.spec.ts`
-> has been run with `INSTANT_ADMIN_TOKEN` set — it skips loudly otherwise),
+> has been run with `INSTANTDB_ADMIN_TOKEN` set — it skips loudly otherwise),
 > email privacy and session-write authorization are enforced by convention only,
 > exactly as before this cycle.
 
@@ -121,9 +121,9 @@ run `npm run dev`, and visit `/login`.
 
 The Playwright auth suite (`e2e/auth.spec.ts`) needs a deterministic code path,
 so it mints codes via the InstantDB **admin** SDK (`generateMagicCode` — no
-email sent). Set `INSTANT_ADMIN_TOKEN` (e2e-only; see `.env.example`) before
-`npm run test:e2e`; when it is unset the auth suite skips loudly rather than
-passing falsely.
+email sent). Set the server-only `INSTANTDB_ADMIN_TOKEN` (see `.env.example`)
+before `npm run test:e2e`; when it is unset the auth suite skips loudly rather
+than passing falsely.
 
 ## Protected routes (route guarding)
 
@@ -141,7 +141,7 @@ This cycle ships only the guard and thin placeholder shells (`/dashboard`,
 screens are later cycles). The intended-destination round-trip is open-redirect
 safe: a crafted `?next=` pointing off-origin (`//evil`, `https://evil`, …) is
 discarded and falls back to `/dashboard`. The route-guard e2e suite
-(`e2e/route-guarding.spec.ts`) reuses `INSTANT_ADMIN_TOKEN` and skips loudly
+(`e2e/route-guarding.spec.ts`) reuses `INSTANTDB_ADMIN_TOKEN` and skips loudly
 when it is unset.
 
 ## Creating a session
@@ -166,7 +166,7 @@ appears or updates on screen with no manual reload. The list is scoped to the
 sessions **you** own (another teacher's sessions never appear), shows title and
 status only (never any email), and renders explicit loading, empty ("you don't
 own any sessions yet"), and error states rather than a blank region. The e2e
-suite (`e2e/dashboard-session-list.spec.ts`) reuses `INSTANT_ADMIN_TOKEN` and
+suite (`e2e/dashboard-session-list.spec.ts`) reuses `INSTANTDB_ADMIN_TOKEN` and
 skips loudly when it is unset.
 
 ## Starting and ending a session
@@ -392,7 +392,7 @@ server admin token is unset, sign-in and the rest of the app keep working; you
 simply remain a non-admin (the failure is logged, never silent).
 
 `ADMIN_EMAILS` is a **new server-only `.env` key** (see `.env.example`); the
-elevated write also relies on the existing server-only `INSTANT_ADMIN_TOKEN`. This
+elevated write also relies on the existing server-only `INSTANTDB_ADMIN_TOKEN`. This
 cycle changes the `users.adminLevel` field type and tightens the `users` rule, so
 it requires **`npx instant-cli push schema`** and **`npm run perms:push`**. The
 e2e suite is `e2e/admin-route.spec.ts` (skips loudly without admin env). **Deferred:**
@@ -418,7 +418,7 @@ unscoped system-wide queries (a full scan, accepted at MVP scale).
 
 - The `useAuth` integration path (island → hook → InstantDB auth → keyed
   `users` upsert) is verified only by the Playwright auth suite, which skips
-  until `INSTANT_ADMIN_TOKEN` and a pushed live schema are provisioned. Until
+  until `INSTANTDB_ADMIN_TOKEN` and a pushed live schema are provisioned. Until
   then this path has no runnable gate; the pure decision logic in
   `src/lib/auth.ts` is unit-covered, but the runtime creation/retry effect is
   not.
@@ -434,13 +434,13 @@ unscoped system-wide queries (a full scan, accepted at MVP scale).
   Until that point the guard shows `route-guard-loading` rather than redirecting.
 - The session-creation **dual-write and observability path** is exercised only
   by the `e2e/create-session.spec.ts` happy-path/observability specs, which skip
-  (loudly, but green) when `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are
+  (loudly, but green) when `INSTANTDB_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are
   unset. Without admin env provisioned, the real `db.transact` write and the
   cycle-0003 permission rules have no runnable gate, so a regression there can
   pass CI as a false green until the credentials are wired in.
 - The session **lifecycle** dual-write, live status reflection, and join-gate
   affordance are exercised end-to-end only by `e2e/session-lifecycle.spec.ts`,
-  which skips (loudly, but green) when `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID`
+  which skips (loudly, but green) when `INSTANTDB_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID`
   are unset. The pure lifecycle core (`assertLegalTransition`, the builders,
   `isJoinEnabled`, the `applyEvent` fold) is fully unit-covered, but the live
   `startSession`/`endSession` write and the cycle-0003 owner-only rule backstop
@@ -452,7 +452,7 @@ unscoped system-wide queries (a full scan, accepted at MVP scale).
 - The **student join** dual-write, live late-joiner sync, and the owner-scoped
   `participants` rule backstop are exercised end-to-end only by
   `e2e/join-via-link.spec.ts`, which skips (loudly, but green) when
-  `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure join core
+  `INSTANTDB_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure join core
   (`buildParticipantJoin`, `shouldCreateParticipant`, `joinSession`) is fully
   unit-covered, but the live `writeEvent` join and the data-layer rule have no
   runnable gate until admin env is provisioned.
@@ -508,7 +508,7 @@ unscoped system-wide queries (a full scan, accepted at MVP scale).
 - The **resource-activation** dual-write, the live cross-context pane sync, and
   the per-row Activate control are exercised end-to-end only by
   `e2e/activate-resource.spec.ts`, which skips (loudly, but green) when
-  `INSTANT_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure core
+  `INSTANTDB_ADMIN_TOKEN`/`PUBLIC_INSTANTDB_APP_ID` are unset. The pure core
   (`buildResourceActivate`, the `ResourceActivated` fold, `rebuildSessionProjection`)
   is fully unit-covered, but the live `activateResource` write and the cycle-0003
   owner-only-write backstop have no runnable gate until admin env is provisioned.
@@ -538,5 +538,4 @@ This project intentionally is setup to use ARIA-tested components as a base from
 Secondarily, components from DaisyUI https://daisyui.com/ should be used where pure-tailwind components are sufficient. DaisyUI also allows a mechanism for themeability that we use to create custom themes for our clients and users.
 
 In the case other components are needed, feel free to use Radix and ShadCn components, ensuring that your implementation of them fits with the accessibility standards of the project, and the general look-and-feel and themeable nature that DaisyUI allows.
-
 
