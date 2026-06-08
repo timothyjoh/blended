@@ -85,3 +85,34 @@ Follow the existing short, imperative commit style (`bbc7a3c better aside styles
 
 ## Environment & Secrets
 Copy `.env.example` to `.env` and populate `PUBLIC_INSTANTDB_APP_ID` (the only required key for the app) before running the Todo demo, the event-spine harness, or any session feature. `PUBLIC_INSTANTDB_APP_ID` is also consumed by **`npm run schema:push`** and `npm run perms:push` (each fails loudly before any network call if it is missing); the live schema-verification e2e (`e2e/schema-push.spec.ts`) additionally requires `INSTANT_ADMIN_TOKEN`. `INSTANT_ADMIN_TOKEN` is an **e2e-only** key consumed by the Playwright auth suite to mint deterministic magic codes (`@instantdb/admin` `generateMagicCode` — no email is sent); it is Node-side only and never used by client/product code. When it is unset, `e2e/auth.spec.ts` skips loudly rather than passing falsely. `ADMIN_EMAILS` (cycle 0019) is a **server-only** comma/whitespace-separated allowlist of emails bootstrapped to the global `uber` admin level on sign-in — **no `PUBLIC_` prefix** (read via `process.env` in `/api/admin/bootstrap`, so it never reaches the client bundle); empty/unset ⇒ no admins are bootstrapped. Never commit populated `.env` files; instead, update `.env.example` when new variables are required and mention them in release notes.
+
+<claude-mem-context>
+# Memory Context
+
+# [blended] recent context, 2026-06-08 9:26am EDT
+
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 6 obs (2,013t read) | 36,499t work | 94% savings
+
+### Jun 8, 2026
+506 9:22a 🔵 Git pull fails due to .git/FETCH_HEAD permission error
+507 9:23a 🔵 Git fetch succeeds; merge blocked by uncommitted AGENTS.md changes
+508 9:24a ✅ Stashed local changes with named reference before pull
+509 9:25a 🔵 Major merge: automated dev cycles, test suite, database schema, and build artifacts integrated
+510 " 🔵 Merge conflict in AGENTS.md after stash pop
+511 " ✅ Resolved AGENTS.md merge conflict by accepting upstream admin feature documentation
+S114 Pull latest from GitHub and sync local repository with remote (Jun 8 at 9:25 AM)
+**Investigated**: Initial git operations to fetch from origin; permission errors on .git/FETCH_HEAD metadata; git stash workflow for preserving local changes during pull; merge conflict resolution in AGENTS.md
+
+**Learned**: Repository uses escalated permissions for git operations on this system; local AGENTS.md had uncommitted changes that conflicted with incoming documentation from major feature branch; merge conflict showed upstream version includes new admin bootstrap system documentation (INSTANT_ADMIN_TOKEN for e2e tests, ADMIN_EMAILS server-side allowlist) from cycles 0019-0020; stash workflow successfully preserved and restored untracked .agents/ directory
+
+**Completed**: Successfully synced blended repository to f52f111 on main branch; integrated 22+ feature cycles with automated development system (.cycle/), comprehensive e2e test suite (Playwright), database schema/permissions system (instant.schema.ts, instant.perms.ts), and skill documentation; resolved AGENTS.md merge conflict by accepting upstream version with admin feature documentation; cleaned up temporary stash
+
+**Next Steps**: Working directory is clean on main branch with AGENTS.md staged and .agents/ untracked; pull is complete and repository is synchronized with GitHub
+
+
+Access 36k tokens of past work via get_observations([IDs]) or mem-search skill.
+</claude-mem-context>
