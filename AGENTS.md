@@ -89,26 +89,16 @@ Copy `.env.example` to `.env` and populate `PUBLIC_INSTANTDB_APP_ID` (the only r
 <claude-mem-context>
 # Memory Context
 
-# [blended] recent context, 2026-06-08 2:02pm EDT
+# [blended] recent context, 2026-06-08 4:07pm EDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 44 obs (14,091t read) | 335,565t work | 96% savings
+Stats: 50 obs (16,292t read) | 372,237t work | 96% savings
 
 ### Jun 8, 2026
-506 9:22a 🔵 Git pull fails due to .git/FETCH_HEAD permission error
-507 9:23a 🔵 Git fetch succeeds; merge blocked by uncommitted AGENTS.md changes
-508 9:24a ✅ Stashed local changes with named reference before pull
-509 9:25a 🔵 Major merge: automated dev cycles, test suite, database schema, and build artifacts integrated
-510 " 🔵 Merge conflict in AGENTS.md after stash pop
-511 " ✅ Resolved AGENTS.md merge conflict by accepting upstream admin feature documentation
-S115 Pull latest from GitHub, resolve conflicts, stage and commit local agent skills documentation (Jun 8 at 9:25 AM)
-S114 Pull latest from GitHub and sync local repository with remote (Jun 8 at 9:25 AM)
-512 9:26a 🔵 Staged changes prepared for commit: AGENTS.md docs + 8 custom agent skills
-513 9:27a 🔵 TypeScript check fails with 65 errors; missing dependencies and type issues in pulled codebase
-514 " ✅ Committed and pushed agent skills documentation to main branch
+514 9:27a ✅ Committed and pushed agent skills documentation to main branch
 S116 Verify production deployment status code after fixing Vercel 500 errors on blended-eta.vercel.app (Jun 8 at 9:28 AM)
 515 9:31a 🔵 Blended: Event-sourced learning platform on Astro/React/InstantDB
 516 " 🔵 Deployed URL blended-eta.vercel.app returns DNS resolution failure
@@ -135,6 +125,7 @@ S165 Implement safe temporary developer login path for testing authentication wi
 613 " 🔵 AuthGate hydration succeeds with valid UUID appId
 614 " ✅ Development authentication modules and API routes added
 615 1:07p ✅ Dev servers stopped; port cleanup verified
+S166 Rename INSTANT_ADMIN_TOKEN environment variable to INSTANTDB_ADMIN_TOKEN throughout codebase to match Vercel deployment naming (Jun 8 at 1:08 PM)
 616 1:34p 🔵 Scope of INSTANT_ADMIN_TOKEN references identified for Vercel env var alignment
 617 " ✅ Renamed INSTANT_ADMIN_TOKEN to INSTANTDB_ADMIN_TOKEN across codebase
 618 " 🔵 Environment variable rename incomplete — documentation outside scoped paths still references INSTANT_ADMIN_TOKEN
@@ -146,15 +137,35 @@ S165 Implement safe temporary developer login path for testing authentication wi
 624 " ✅ Updated .env.example documentation for INSTANTDB_ADMIN_TOKEN scope
 625 1:37p ✅ Updated AGENTS.md documentation for INSTANTDB_ADMIN_TOKEN actual scope
 626 " ✅ Updated e2e/support/auth.ts comments for INSTANTDB_ADMIN_TOKEN clarity
-S166 Rename INSTANT_ADMIN_TOKEN environment variable to INSTANTDB_ADMIN_TOKEN throughout codebase to match Vercel deployment naming (Jun 8 at 1:37 PM)
-**Investigated**: Searched entire codebase for references to INSTANT_ADMIN_TOKEN using ripgrep across .env.example, src/, e2e/, docs/runbooks/, README.md, release-notes.md, and AGENTS.md. Identified 30+ files needing updates, including configuration, test skip conditions, API route code, and documentation.
+S167 Add all files to commit and push: developer login bypass feature with admin enhancements (Jun 8 at 1:37 PM)
+627 2:02p ✅ Staged auth and admin feature updates with dev utilities
+628 2:03p 🟣 Developer login bypass shipped (feat: add developer login bypass)
+S181 Browser control and guided tour of Blended app deployed on Vercel (Jun 8 at 2:04 PM)
+646 2:37p 🔵 In-app Browser Control Skill Available
+647 2:38p 🟣 Browser Control Session Established; Deployed App Opened
+648 " 🔵 Blended App Structure Inspected; Home and Login Routes Accessible
+649 " 🔵 Login Page Hydrated; Dashboard Protected Route Redirects to Login
+650 " 🔵 Todo Demo Fully Functional with InstantDB Backend; 13 Tasks Loaded
+651 2:39p 🔵 Blog Demo Functional; Astro Content Collections Working with Rich Article Rendering
+S188 Codex agent reviewing and approving browser automation test of local login flow on Astro dev server (Jun 8 at 2:39 PM)
+S189 Codex agent testing login flow on local Astro dev server; browser origin access approved (Jun 8 at 3:04 PM)
+S193 Remove mockup prototype infrastructure from Blended codebase as assessment determined them unsuitable for continued use (Jun 8 at 3:06 PM)
+685 3:17p 🔵 Mockup infrastructure scope and references mapped
+686 3:18p ✅ Mockup prototype files removed from codebase
+687 " ✅ SPEC.md updated to remove mockup documentation
+688 " 🔵 All mockup references successfully removed from codebase
+690 " 🔵 Production build succeeds after mockup removal
+691 " 🔵 End-to-end verification: mockups routes deleted, links removed
+S194 Remove mockup prototype infrastructure from Blended codebase as determined unsuitable (Jun 8 at 3:19 PM)
+S195 Pull latest from GitHub and sync Blendly project; edit logo to remove text branding (Jun 8 at 3:22 PM)
+**Investigated**: Git status showed pending changes and deletions across the Blendly codebase; examined project structure and identified mockup files slated for removal; located and opened blendly-logo.jpeg to assess branding changes needed
 
-**Learned**: Variable scope: INSTANTDB_ADMIN_TOKEN is server-only (never PUBLIC_ prefix), used by /api/admin/bootstrap for user elevation, optional developer login, and e2e test code minting. When unset, admin SDK routes fail closed and e2e suites skip loudly. Original documentation overstated "e2e-only" scope—the token serves both testing and runtime API needs. Distinction: e2e helper is testing infrastructure, but the token itself is a genuine server secret.
+**Learned**: Project is undergoing significant cleanup/refactoring with 20+ mockup prototype files being removed (StudentChatMockup.tsx, TeacherAMockups.tsx, MockupLayout.astro, and 20 student/teacher mockup pages); core documentation (AGENTS.md, docs/SPEC.md) and pitch page are being actively updated; logo file is in public/assets/, not src/assets/
 
-**Completed**: Global find-and-replace of INSTANT_ADMIN_TOKEN → INSTANTDB_ADMIN_TOKEN across 32 files (627 insertions, 357 deletions net +270 lines). Updated: .env.example config, all 15+ e2e test skip conditions and references, src/pages/api/admin/bootstrap.ts and dev-code.ts runtime reads, e2e/support/auth.ts helpers, README documentation (3 clarifications), AGENTS.md guidance (detailed server-only semantics), and release-notes.md. All code built successfully; tests pass. Historical cycle documentation in docs/cycle/* left untouched (still contains old name).
+**Completed**: Executed git pull successfully to synchronize with remote origin/main branch; identified all modified and deleted files; edited blendly-logo.jpeg to remove "BLENDLY / learn together" text branding while preserving the blender mark graphic
 
-**Next Steps**: Changes staged but not committed. User can review diffs, stage changes, and commit per project workflow. Documentation updates clarify server-only constraint and expanded scope beyond e2e to prevent future confusion about the variable's purpose and security handling.
+**Next Steps**: Review and commit logo branding changes; assess remaining modified files (AGENTS.md, docs/SPEC.md, pitch.astro) to understand scope of documentation/content updates; determine if additional cleanup or consolidation work is needed as part of the prototype removal refactoring
 
 
-Access 336k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 372k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

@@ -5,7 +5,7 @@
 **Created:** 2026-06-05  
 **Last updated:** 2026-06-06  
 **Primary audience:** builders, coding agents, designers, demo operators, and future maintainers  
-**Source baseline:** working product notes plus the `/mockups` prototype gallery in this repository  
+**Source baseline:** working product notes and the current application routes in this repository  
 **Canonical repository:** `https://github.com/Timothyjoh/blended`
 
 ## Purpose
@@ -504,16 +504,7 @@ The student surface MUST support:
 - Cursor-vote participation when active.
 - Mobile-responsive layout.
 
-### 13.3 Mockup Routes
-
-The repository currently includes `/mockups` with 20 static prototypes:
-
-- `/mockups/teacher/01` through `/mockups/teacher/10`
-- `/mockups/student/01` through `/mockups/student/10`
-
-Mockups are exploratory and MAY diverge in visual treatment, but any behavior selected for implementation SHOULD be reconciled back into this spec or a future architecture note.
-
-### 13.4 `/spec` Documentation Route
+### 13.3 `/spec` Documentation Route
 
 The application MUST provide `/spec`, a route that converts `docs/SPEC.md` from Markdown to HTML at request/build time.
 
@@ -745,7 +736,6 @@ Demo beats:
 | Cursor voting | Samples use normalized coordinates and generate summary event. |
 | Replay | Replay/event timeline reconstructs key events in chronological order. |
 | Rate limiting | Message/cursor floods do not break session state. |
-| `/mockups` | Mockup index and 20 routes render successfully. |
 | `/spec` | Markdown in `docs/SPEC.md` renders as HTML at `/spec`. |
 | Build | `pnpm run build` or equivalent passes before push. |
 
@@ -767,7 +757,7 @@ Demo beats:
 - [ ] Replay/event log shows session lifecycle, resource switches, question states, and cursor-vote summary.
 - [ ] Blocked resources have a visible fallback.
 - [ ] Demo has seeded fallback data/resources.
-- [ ] `/mockups` and `/spec` routes render.
+- [ ] `/spec` route renders.
 
 ### 21.2 Required for Production Hardening
 
